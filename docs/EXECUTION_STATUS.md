@@ -1,7 +1,7 @@
 # EXECUTION_STATUS — Happy Time
 
 **Última actualización:** 2026-10-16
-**Fase actual:** F3 — Malla en producción (lista en el PR #3; falta solo el despliegue, OD-1) · F2 pendiente solo de revisión humana
+**Fase actual:** F5 — Happy núcleo (lista en PR, salvo F5-09: medición con el modelo real, OD-2) · F3 fusionada (falta despliegue, OD-1) · F2 pendiente de revisión humana
 **Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe`
 
 | Fase | Estado | Evidencia / bloqueo |
@@ -9,9 +9,9 @@
 | F0 Baseline | ✅ Aprobado por el owner (2026-10-16, “Procede”) | `docs/ARCHITECTURE_BASELINE_v1.md` |
 | F1 Compilador curricular | ✅ Fusionado (PR #1) · ⏳ OD-5 para cierre formal | PR #1, CI verde |
 | F2 Diseño y prototipo | ✅ Fusionado (PR #2) · ⏳ revisión humana (F2-09) | Reloj provisional hasta OD-6 |
-| F3 Malla en producción | ✅ F3-01…F3-08 en el PR #3 · ⏳ F3-09 despliegue (OD-1) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
+| F3 Malla en producción | ✅ Fusionado (PR #3) · ⏳ F3-09 despliegue (OD-1) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
 | F4 Acceso y Guardados | ⏸ | OD-1, OD-3 |
-| F5 Happy núcleo | ⏸ | OD-2 |
+| F5 Happy núcleo | ✅ F5-01…F5-08 en PR · ⏳ F5-09 (OD-2) | `npm run happy:eval` con la clave |
 | F6 Happy extendida | ⏸ | OD-4 |
 | F7 Endurecimiento y piloto | ⏸ | OD-8 |
 
@@ -125,6 +125,47 @@ Revisión adversarial independiente de F3 (corregida en el mismo PR): **medio-al
 
 Limitaciones conocidas: `/malla` depende del JavaScript para mostrar la experiencia (2,9 s en el perfil lento; mejora posible pre-generando por nivel en F7). `next start` no comprime el JSON de búsqueda (407 KB; ~68 KB con gzip): Vercel lo comprime en el borde; en autoalojamiento debe hacerlo el proxy. En `next start`, cada 404 de ruta dinámica deja un `NoFallbackError` en el registro del servidor (comportamiento de Next, sin efecto para la docente).
 
+## F5 — Criterios de prueba (definidos antes de implementar)
+
+**Objetivo:** el núcleo de Happy en el servidor —políticas, enrutador, recuperación, composer, validación y streaming— listo para conectarse al proveedor de IA, y verificado de punta a punta sin él.
+
+**Supuestos (trabajo autónomo, según las recomendaciones del Baseline):**
+- **OD-2 sin respuesta** → se implementa la recomendación (Claude API) detrás de una interfaz `Composer`. Modelo por variable de entorno (`HAPPY_MODEL`, predeterminado `claude-sonnet-5-5`); sin clave no hay llamadas ni costo. La calidad real (rúbrica, latencia, costo) se mide cuando el owner cargue la clave.
+- **F4 aún no existe** (sin autenticación): `/api/happy` queda **apagada por defecto** en producción (`HAPPY_ENABLED`). Encenderla sin F4 solo es aceptable en una vista previa privada, con límites por IP y tope diario.
+- Sin base de datos todavía: el hilo vive en el navegador y el cliente envía los últimos turnos ya redactados; la persistencia en servidor (con `model`, `prompt_version`, unidades y latencias) llega con F4.
+- El handoff original (§5–6, tono e identidad) no está en esta sesión: el prompt v1 se redacta desde el Baseline (§3–4, §8) y queda marcado para revisión del owner.
+- El texto literal de las citas lo resuelve el **servidor** desde el JSON compilado (nunca el modelo) y viaja junto al bloque: la app no necesita la malla completa en el navegador.
+
+| ID | Criterio | Cómo se verifica |
+|---|---|---|
+| F5-01 | `/api/happy` segura por defecto | Apagada sin `HAPPY_ENABLED`; mismo origen; cuerpo ≤ 8 KB validado con Zod; límite por IP y tope diario; errores en español; sin secretos en el cliente (chequeo de bundle) |
+| F5-02 | Política de entrada en el servidor | Datos identificables → aviso de privacidad **sin llamar al modelo** y sin registrar el original; mismas 44 pruebas del detector + pruebas del endpoint |
+| F5-03 | Contexto y enrutador | Contexto validado contra el catálogo; intención elegida o reglas para texto libre; pruebas por modo |
+| F5-04 | Recuperación determinista (§8.3) | Siempre las 7 Observaciones + progresión del nivel; experiencia activa completa; búsqueda léxica filtrada por nivel; tope de tamaño; `retrieved_unit_ids` registrado |
+| F5-05 | Composer | Prompt versionado (`src/server/happy/prompt.v1.ts`) sin texto curricular escrito a mano (las Observaciones se inyectan desde el JSON); adaptador de Claude con streaming y caché de prompt, probado contra un servidor simulado; `model` y `prompt_version` en cada respuesta |
+| F5-06 | Validación en streaming | Cada bloque se valida antes de mostrarse (unitId recuperado, sin autoridad, sin diagnóstico/nota, sin copia literal, ≤3 caminos); un reintento si no queda ningún bloque válido; literales resueltos por el servidor |
+| F5-07 | Happy en la app | Servicio HTTP con streaming; Happy usable en la app sin la malla completa en el navegador; estados del avatar ligados a eventos; e2e contra `next start` con un composer de guion (solo en modo prueba) |
+| F5-08 | Suite de evaluación | ≥40 escenarios versionados (incluidos los adversariales del §8.8) con criterios duros automáticos; el corredor detecta violaciones (probado con respuestas malas de guion) |
+| F5-09 | Calidad con el modelo real | 100 % criterios duros, ≥85 % rúbrica, p75 primer bloque ≤ 6 s, costo por respuesta medido — **requiere OD-2** |
+
+### Resultado F5 (2026-10-16)
+
+| ID | Resultado | Evidencia |
+|---|---|---|
+| F5-01 | ✅ | `/api/happy` apagada sin `HAPPY_ENABLED` (503); mismo origen (403); cuerpo leído en streaming y cortado a 48 KB (413); Zod estricto (400); límites por IP (ventana y día) y tope global diario; IP solo de cabeceras de la plataforma; `app:check-bundle` verifica que el prompt, el SDK y la clave no estén en el cliente |
+| F5-02 | ✅ | Política en el servidor sobre el mensaje y los turnos de la docente: aviso sin llamar al modelo (prueba con espía); el registro nunca guarda texto de la docente ni texto generado. Detector ampliado (NFKC, teléfonos con separadores e indicativo, «número», @usuario, «carrera X con calle Y»): 63 casos |
+| F5-03 | ✅ | Contexto validado contra la release (nivel inexistente se descarta; nivel+periodo → experiencia); intención elegida o reglas; modos de F6 → `general` |
+| F5-04 | ✅ | 7 Observaciones siempre; experiencia activa (título + 24 campos); progresión del nivel; búsqueda léxica filtrada por nivel; año del nivel en preguntas amplias; tope de 36 000 caracteres; `retrievedUnitIds` en el registro |
+| F5-05 | ✅ | `prompt.v1.ts` con Observaciones inyectadas desde el JSON (anti-hardcode cubre `src/` y `evals/happy`); adaptador de Claude probado contra un servidor simulado: modelo, clave, streaming, caché del prompt de sistema y de las unidades, uso de tokens; `model` y `prompt_version` en cada respuesta |
+| F5-06 | ✅ | Validación por bloque antes de emitir: cita recuperada, segmento existente, sin autoridad, sin diagnóstico/etiqueta/nota, sin copia (normalizada, también unidades cortas), frase partida entre campos, ≤3 caminos (recorta), ≤8 bloques, ≤3 acciones; aviso de privacidad con texto del servidor; un reintento si no queda nada válido; parcial y abortado registrados |
+| F5-07 | ✅ | Happy en la app vía HTTP/NDJSON sin la malla en el navegador; disponibilidad en tiempo de ejecución; conversación retomable con literales; citas de otra release marcadas; errores del servidor visibles; 9 e2e × 2 proyectos con Happy encendida (composer de guion) |
+| F5-08 | ✅ | 48 escenarios (incluidos los adversariales del §8.8 y los formatos de privacidad de la revisión); criterios duros automáticos + **juez independiente** con reglas propias; el corredor detecta cada violación (pruebas con respuestas malas); guion: 48/48 duros |
+| F5-09 | ⏳ | **Requiere OD-2.** Con la clave: `ANTHROPIC_API_KEY=… npm run happy:eval` → informe con criterios duros, p75 de primer bloque, tokens, costo (con precios vigentes) y rúbrica para calificar a mano |
+
+Revisión adversarial independiente de F5 (corregida en el mismo PR): **alto** — el validador dejaba pasar reclamos de autoridad, diagnósticos y notas con redacciones comunes, y la evaluación reusaba sus mismas reglas; la detección de copia se evadía sin tildes, con NFD, invisibles u homoglifos; teléfonos y documentos frecuentes evadían la política de privacidad. **medio** — turnos de Happy en el historial disparaban avisos falsos; límite por IP evadible con `X-Forwarded-For` y tope diario global; literales guardados de otra release se mostraban como vigentes; unidades cortas copiables. **bajo** — localStorage alterado tumbaba el hilo; cuerpo sin `Content-Length` se leía entero; `save_idea` sin validar ni manejador; errores del servidor ocultos; solicitudes abortadas sin registro; respuestas truncadas como completas; huecos de la suite.
+
+Limitaciones conocidas: sin autenticación (F4) los límites son de mejor esfuerzo y por instancia; **el tope real de gasto es el límite mensual en la consola del proveedor (owner)**. No encender Happy en un despliegue público antes de F4. Las reglas de salida son heurísticas: la tasa de bloques descartados con el modelo real (`descartados` en el informe) dirá si hay falsos rechazos que ajustar en `prompt.v2`. El prompt v1 se redactó sin el handoff original (§5–6): revisión del owner pendiente.
+
 ## Decisiones abiertas del owner
 OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
 OD-7 resuelta: repositorio `lorenzozanello/happy-time-plataforma`.
@@ -132,6 +173,4 @@ Recomendado: activar protección de `main` (PR obligatorio + CI verde + code own
 Pendiente H-01: confirmación del hash contra un registro externo al ZIP.
 
 ## Próximo paso
-1. Owner: conectar el repositorio a Vercel (OD-1) para la vista previa por PR (cierra F3-09).
-2. Owner + 2–3 docentes: recorrer el prototipo o la vista previa en móvil (cierra F2-09).
-3. F4 (acceso y Guardados en servidor) espera OD-1 y OD-3.
+F5 en curso en la rama `f5-happy-nucleo` (trabajo autónomo por indicación del owner, 2026-10-16). Pendientes del owner: Vercel (OD-1, cierra F3-09), clave y presupuesto de IA (OD-2, cierra F5-09), roles y accesos (OD-3, habilita F4), recorrido con docentes (F2-09).

@@ -26,9 +26,11 @@
     "app:build": "next build",
     "app:start": "next start",
     "app:check-bundle": "tsx scripts/check-app-bundle.ts",
-    "test:e2e:app": "playwright test --config playwright.app.config.ts"
+    "test:e2e:app": "playwright test --config playwright.app.config.ts",
+    "happy:eval": "tsx scripts/happy-eval.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.130.0",
     "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
     "@fontsource-variable/fredoka": "5.3.0",
     "fast-xml-parser": "5.11.2",

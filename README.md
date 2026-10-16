@@ -39,6 +39,25 @@ npm run app:check-bundle   # la malla completa no viaja al navegador
 npm run test:e2e:app       # e2e contra next start (URLs, fidelidad, axe, seguridad, LCP)
 ```
 
+### Happy (asistente)
+
+Apagada por defecto. Variables del servidor:
+
+| Variable                                                                            | Uso                                                                     |
+| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `HAPPY_ENABLED=1`                                                                   | Enciende `/api/happy` (no hacerlo en un despliegue público antes de F4) |
+| `ANTHROPIC_API_KEY`                                                                 | Clave del proveedor (solo servidor)                                     |
+| `HAPPY_MODEL`                                                                       | Modelo (predeterminado `claude-sonnet-5-5`)                             |
+| `HAPPY_IP_LIMIT`, `HAPPY_IP_WINDOW_MS`, `HAPPY_IP_DAILY_LIMIT`, `HAPPY_DAILY_LIMIT` | Límites de mejor esfuerzo                                               |
+| `HAPPY_TRUST_XFF=1`                                                                 | Solo detrás de un proxy propio que reescribe `X-Forwarded-For`          |
+
+```bash
+npm run happy:eval -- --composer=guion        # verifica el pipeline y el corredor sin IA
+ANTHROPIC_API_KEY=… npm run happy:eval         # evaluación real (informe en evals/resultados/)
+```
+
+Fija también un límite de gasto mensual en la consola del proveedor: es el único tope de costo fiable antes de F4.
+
 ### Prototipo (un solo HTML)
 
 ```bash

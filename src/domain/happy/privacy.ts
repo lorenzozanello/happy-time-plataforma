@@ -59,12 +59,19 @@ const FAMILY_OF =
 
 const EMAIL =
   /[\w.+-]+\s*(?:@|\(at\)|\[at\]|\sarroba\s)\s*[\w-]+\s*(?:\.|\(dot\)|\sdot\s)\s*[\w.]+/gi;
-const PHONE =
-  /(?:\+?57[\s.-]?)?\b3\d{2}[\s.-]?\d{3}[\s.-]?\d{4}\b|\b(?:60\d|\d{3})[\s.-]?\d{3}[\s.-]?\d{4}\b|\b\d{10}\b|\b\d{7}\b/g;
+/**
+ * Teléfonos: 7 a 12 dígitos con separadores habituales (espacios, puntos, guiones, paréntesis),
+ * con o sin indicativo +57. Se evalúa sobre el texto NFKC (dígitos de ancho completo incluidos).
+ */
+const PHONE = /(?:\+\s?\d{1,3}[\s.-]*)?(?:\(\s*\d{1,4}\s*\)[\s.-]*)?\d(?:[\s.-]?\d){6,11}\b/g;
 const DOC_ID =
-  /\b(?:c\.?\s?c\.?|t\.?\s?i\.?|r\.?\s?c\.?|nuip|documento|c[eé]dula|tarjeta de identidad|registro civil)\s*(?:n[oº°.]*\s*)?:?\s*\d[\d.\s]{4,}\d/gi;
+  /\b(?:c\.?\s?c\.?|t\.?\s?i\.?|r\.?\s?c\.?|nuip|documento|c[eé]dula|tarjeta de identidad|registro civil|pasaporte)\s*(?:(?:n[uú]mero|num\.?|n[oº°.]*)\s*)?(?:de\s+identidad\s*)?:?\s*\d[\d.\s-]{4,}\d/gi;
+/** Rangos de años y fechas con guiones (2025-2026, 12-10-2026) no son teléfonos. */
+const NOT_A_PHONE = /^(?:(?:19|20)\d{2}\s*-\s*(?:19|20)?\d{2}|\d{1,2}-\d{1,2}-(?:19|20)?\d{2})$/;
+/** Usuarios de redes sociales (@usuario). */
+const HANDLE = /(?<![\w.])@[a-z0-9_.]{3,30}\b/gi;
 const ADDRESS =
-  /\b(?:cra|kra|carrera|calle|cll|cl|diagonal|dg|transversal|tv|avenida|av)\.?\s*\d+\s*[a-z]?\s*(?:#|no\.?|n°|nº)\s*\d+[a-z]?(?:\s*-\s*\d+)?/gi;
+  /\b(?:cra|kra|carrera|calle|cll|cl|diagonal|dg|transversal|tv|avenida|av)\.?\s*\d+\s*[a-z]?\s*(?:(?:#|no\.?|n°|nº|n[uú]mero)\s*\d+[a-z]?(?:\s*-\s*\d+)?|con\s+(?:cra|kra|carrera|calle|cll|cl|diagonal|dg|transversal|tv|avenida|av)\.?\s*\d+)/gi;
 
 interface Token {
   text: string;
@@ -133,11 +140,19 @@ function nameTokens(text: string): Set<number> {
   return names;
 }
 
-export function checkPrivacy(text: string): PrivacyResult {
+export function checkPrivacy(input: string): PrivacyResult {
+  // NFKC: dígitos y signos de ancho completo («３００…», «＠») cuentan como los normales.
+  const text = input.normalize("NFKC");
   const findings = new Set<PrivacyFinding>();
   const spans: [number, number, string][] = [];
-  const collect = (re: RegExp, finding: PrivacyFinding, marker: string) => {
+  const collect = (
+    re: RegExp,
+    finding: PrivacyFinding,
+    marker: string,
+    keep: (match: string) => boolean = () => true,
+  ) => {
     for (const m of text.matchAll(re)) {
+      if (!keep(m[0])) continue;
       findings.add(finding);
       spans.push([m.index, m.index + m[0].length, marker]);
     }
@@ -145,7 +160,8 @@ export function checkPrivacy(text: string): PrivacyResult {
   collect(EMAIL, "contact", "[contacto]");
   collect(DOC_ID, "identifier", "[documento]");
   collect(ADDRESS, "address", "[dirección]");
-  collect(PHONE, "contact", "[contacto]");
+  collect(PHONE, "contact", "[contacto]", (m) => !NOT_A_PHONE.test(m.trim()));
+  collect(HANDLE, "contact", "[contacto]");
 
   const ts = tokens(text);
   for (const i of nameTokens(text)) {

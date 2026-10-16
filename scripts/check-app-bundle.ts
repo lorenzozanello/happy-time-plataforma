@@ -102,6 +102,16 @@ function walk(dir: string, ext: RegExp): string[] {
 
 const problems: string[] = [];
 
+/**
+ * Marcas de código que solo debe existir en el servidor (F5-01): el prompt de Happy, el SDK del
+ * proveedor y el nombre de la clave. Si aparecen en un chunk del cliente, algo se filtró.
+ */
+const SERVER_ONLY = [
+  "Eres Happy, el asistente curricular",
+  "anthropic-version",
+  "ANTHROPIC_API_KEY",
+];
+
 /* 1 · JavaScript del cliente */
 const chunks = walk(join(NEXT, "static"), /\.js$/);
 let jsBytes = 0;
@@ -115,6 +125,9 @@ for (const f of chunks) {
   ];
   if (hits.length > 0)
     problems.push(`${relative(ROOT, f)}: contiene texto curricular («${hits[0] ?? ""}»)`);
+  for (const marker of SERVER_ONLY)
+    if (raw.includes(marker))
+      problems.push(`${relative(ROOT, f)}: contiene código solo de servidor («${marker}»)`);
 }
 
 /* 2 · Páginas HTML pre-generadas */

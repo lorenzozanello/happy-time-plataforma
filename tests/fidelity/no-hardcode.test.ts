@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { ROOT, release } from "../helpers";
 
 /** Directorios de código de la aplicación donde no puede vivir texto curricular. */
-const CODE_DIRS = ["src", "scripts", "app", "prototype"];
+const CODE_DIRS = ["src", "scripts", "app", "prototype", "evals/happy"];
 const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|json|md|css|html)$/;
 /** Ventana deslizante: cualquier secuencia de N palabras consecutivas de la malla delata copia. */
 // La ventana y las palabras vienen de src/domain/curriculum/fingerprint.ts

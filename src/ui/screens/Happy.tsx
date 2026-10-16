@@ -1,9 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { shortHeader } from "../../domain/curriculum/repository";
+import type { Unit } from "../../domain/curriculum/schema";
+import { catalogExperience, catalogLevel } from "../../domain/curriculum/views";
+import type { HistoryTurn } from "../../domain/happy/prompt";
 import { checkPrivacy, PRIVACY_MESSAGE } from "../../domain/happy/privacy";
 import type { Block, HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
-import { newId, now, useApp, useRepo } from "../app/state";
-import type { Thread, ThreadMessage } from "../app/types";
+import { summarizeResponse } from "../../domain/happy/shape";
+import { newId, now, useApp } from "../app/state";
+import {
+  HappyError,
+  type HappyPartial,
+  type HappyStatus,
+  type Thread,
+  type ThreadMessage,
+} from "../app/types";
 import { Button, ErrorState, Icon, IconButton, Literal, Provenance, Skeleton } from "../components";
 import { HappyAvatar, HappyLockup, type HappyState } from "../happy/HappyAvatar";
 import { ROMAN } from "../presentation";
@@ -27,15 +37,164 @@ interface HappyProps {
 }
 
 export function HappyScreen(props: HappyProps) {
-  const { repo, happyEnabled } = useApp();
-  if (!repo || !happyEnabled) return <HappyComingSoon />;
+  const { happyEnabled, services } = useApp();
+  if (!happyEnabled) return <HappyComingSoon />;
+  if (services.happyAccess) return <HappyGate {...props} />;
   return <HappyChat {...props} />;
 }
 
-function HappyChat({ threadId, mode: initialMode, context: initialContext }: HappyProps) {
+/** Hasta F4: comprueba si Happy está habilitada y pide el código de acceso del piloto una vez. */
+function HappyGate(props: HappyProps) {
+  const { services } = useApp();
+  const access = services.happyAccess;
+  const [status, setStatus] = useState<{
+    attempt: number;
+    value: HappyStatus | "loading" | "error";
+  }>({
+    attempt: 0,
+    value: "loading",
+  });
+  const [attempt, setAttemptState] = useState(0);
+  const setAttempt = (fn: (n: number) => number) => {
+    setAttemptState(fn);
+  };
+  // Al cambiar el intento, el estado vuelve a «cargando» en el mismo render (sin setState en efecto).
+  let current: HappyStatus | "loading" | "error" = status.value;
+  if (status.attempt !== attempt) current = "loading";
+  useEffect(() => {
+    let alive = true;
+    access
+      ?.status()
+      .then((s) => {
+        if (alive) setStatus({ attempt, value: s });
+      })
+      .catch(() => {
+        if (alive) setStatus({ attempt, value: "error" });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [access, attempt]);
+
+  const view = current;
+  if (view === "loading")
+    return (
+      <div className="screen happy" aria-busy="true">
+        <header className="happy__head">
+          <HappyLockup size={48} />
+        </header>
+        <Skeleton lines={4} />
+      </div>
+    );
+  if (view === "error")
+    return (
+      <div className="screen happy">
+        <header className="happy__head">
+          <HappyLockup size={48} />
+        </header>
+        <ErrorState
+          message="No pudimos comprobar si Happy está disponible. Revisa tu conexión."
+          onRetry={() => {
+            setAttempt((n) => n + 1);
+          }}
+        />
+      </div>
+    );
+  if (!view.enabled) return <HappyComingSoon />;
+  if (view.needsCode && !view.hasCode)
+    return (
+      <AccessCodeForm
+        onSaved={() => {
+          setAttempt((n) => n + 1);
+        }}
+      />
+    );
+  return (
+    <HappyChat
+      {...props}
+      onAccessDenied={() => {
+        setStatus({ attempt, value: { ...view, hasCode: false } });
+      }}
+    />
+  );
+}
+
+export function AccessCodeForm({ onSaved, message }: { onSaved: () => void; message?: string }) {
+  const { services } = useApp();
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(message ?? null);
+  return (
+    <div className="screen happy">
+      <header className="screen__head">
+        <HappyLockup size={48} state="escucha" />
+        <h1 className="display">Código de acceso</h1>
+        <p className="lead">
+          Durante el piloto, Happy se abre con el código que te compartió la coordinación. Se guarda
+          en este teléfono; solo lo escribes una vez.
+        </p>
+      </header>
+      <form
+        className="form"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          const v = code.trim();
+          if (v.length < 4) {
+            setError("Escribe el código completo.");
+            return;
+          }
+          services.happyAccess?.setCode(v);
+          onSaved();
+        }}
+      >
+        <label htmlFor="happy-code">Código del piloto</label>
+        <input
+          id="happy-code"
+          type="text"
+          inputMode="text"
+          autoComplete="off"
+          autoCapitalize="off"
+          value={code}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "happy-code-error" : undefined}
+          onChange={(e) => {
+            setCode(e.target.value);
+            setError(null);
+          }}
+        />
+        {error && (
+          <p id="happy-code-error" className="form__error" role="alert">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary">
+          Abrir Happy
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function historyOf(thread: Thread | undefined): HistoryTurn[] {
+  if (!thread) return [];
+  return thread.messages
+    .flatMap((m): HistoryTurn[] => {
+      if (m.role === "docente" && m.text) return [{ role: "docente", text: m.text }];
+      if (m.role === "happy" && m.response)
+        return [{ role: "happy", text: summarizeResponse(m.response) }];
+      return [];
+    })
+    .slice(-6);
+}
+
+function HappyChat({
+  threadId,
+  mode: initialMode,
+  context: initialContext,
+  onAccessDenied,
+}: HappyProps & { onAccessDenied?: () => void }) {
   const app = useApp();
-  const repo = useRepo();
-  const { state, navigate, replace, dispatch, services, online } = app;
+  const { state, catalog, navigate, replace, dispatch, services, online } = app;
   const existing = threadId ? state.threads.find((t) => t.id === threadId) : undefined;
   const [thread, setThread] = useState<Thread | undefined>(existing);
   const [mode, setMode] = useState<Mode | undefined>(existing?.mode ?? initialMode);
@@ -43,7 +202,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [phase, setPhase] = useState<"idle" | "thinking" | "streaming" | "done">("idle");
-  const [partial, setPartial] = useState<HappyResponse | null>(null);
+  const [partial, setPartial] = useState<HappyPartial | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
 
@@ -103,8 +262,8 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
     const raw = text.trim();
     if (!raw || phase === "thinking" || phase === "streaming") return;
     setMode(m);
-    // Política de entrada (ADR-009): solo se guarda la versión redactada; si identifica a una
-    // persona, no se envía a Happy y se pide reformular.
+    // Política de entrada (ADR-009/014): solo se guarda la versión redactada; si identifica a una
+    // persona, no se envía a Happy y se pide reformular. El servidor repite la comprobación.
     const privacy = checkPrivacy(raw);
     const stored = privacy.redacted;
     const userMsg: ThreadMessage = {
@@ -148,22 +307,41 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
     setPhase("thinking"); // feedback local inmediato (<150 ms)
     setPartial(null);
     try {
-      const response = await services.happy.respond({ mode: m, message: raw, context }, (p) => {
-        setPhase("streaming");
-        setPartial(p);
-      });
+      const result = await services.happy.respond(
+        { mode: m, message: raw, context, history: historyOf(from) },
+        (p) => {
+          setPhase("streaming");
+          setPartial(p);
+        },
+      );
       current = {
         ...current,
         messages: [
           ...current.messages,
-          { id: newId(), role: "happy", replyTo: userMsg.id, response, createdAt: now() },
+          {
+            id: newId(),
+            role: "happy",
+            replyTo: userMsg.id,
+            response: result.response,
+            units: result.units,
+            ...(result.metrics ? { metrics: result.metrics } : {}),
+            createdAt: now(),
+          },
         ],
         updatedAt: now(),
       };
       persist(current);
       setPartial(null);
       setPhase("done");
-    } catch {
+    } catch (e) {
+      const err = e instanceof HappyError ? e : undefined;
+      if (err?.code === "access") {
+        // El código del piloto no sirve: se pide de nuevo; el mensaje queda guardado.
+        setPartial(null);
+        setPhase("idle");
+        onAccessDenied?.();
+        return;
+      }
       current = {
         ...current,
         messages: [
@@ -173,7 +351,9 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
             role: "happy",
             replyTo: userMsg.id,
             error:
-              "Happy no pudo responder esta vez. Tu mensaje quedó guardado; vuelve a intentarlo.",
+              err?.code === "limit" || err?.code === "disabled"
+                ? err.message
+                : "Happy no pudo responder esta vez. Tu mensaje quedó guardado; vuelve a intentarlo.",
             createdAt: now(),
           },
         ],
@@ -214,7 +394,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
         sourceUnitIds: response.blocks.flatMap((b) => (b.kind === "malla_ref" ? [b.unitId] : [])),
         ...(context.experienceCode ? { experienceCode: context.experienceCode } : {}),
         ...(thread ? { threadId: thread.id } : {}),
-        release: repo.release.release,
+        release: catalog.release,
         createdAt: now(),
       },
     });
@@ -247,10 +427,12 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
         </p>
       </header>
 
-      <p className="proto-note" role="note">
-        Prototipo: Happy está simulada. Responde con ejemplos fijos construidos con la malla real;
-        no usa IA.
-      </p>
+      {services.prototype && (
+        <p className="proto-note" role="note">
+          Prototipo: Happy está simulada. Responde con ejemplos fijos construidos con la malla real;
+          no usa IA.
+        </p>
+      )}
 
       <ContextChips
         context={context}
@@ -331,6 +513,8 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
               <ResponseView
                 key={m.id}
                 response={m.response}
+                units={m.units ?? []}
+                metrics={m.metrics}
                 feedback={m.feedback}
                 onFeedback={(v) => {
                   setFeedback(m.id, v);
@@ -340,6 +524,12 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
                   if (a.kind === "open_experience" && a.payload)
                     navigate({ name: "ficha", code: a.payload });
                   else if (a.kind === "send" && a.payload) void send(a.payload, "aterrizar");
+                  else if (a.kind === "save_idea") {
+                    const steps = m.response?.blocks.find((b) => b.kind === "steps");
+                    if (steps && m.response)
+                      saveIdea(steps.title, steps.items.join("\n"), m.response);
+                    else setToast("Guarda un camino o unos pasos desde su botón «Guardar idea».");
+                  }
                 }}
                 onLand={(title) => {
                   void send(`Quiero aterrizar el camino «${title}»`, "aterrizar");
@@ -352,7 +542,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
               <Skeleton lines={3} />
             </div>
           )}
-          {partial && <ResponseView response={partial} pending />}
+          {partial && <ResponseView response={partial.response} units={partial.units} pending />}
           <div ref={end} className="conversation__end" />
         </div>
       )}
@@ -418,17 +608,16 @@ function ContextChips({
   context: HappyContext;
   onRemove: (k: keyof HappyContext) => void;
 }) {
-  const repo = useRepo();
+  const { catalog } = useApp();
   const items: { key: keyof HappyContext; label: string }[] = [];
-  const lvl = context.levelId ? repo.levels.find((l) => l.id === context.levelId) : undefined;
+  const lvl = context.levelId ? catalogLevel(catalog, context.levelId) : undefined;
   if (lvl) items.push({ key: "levelId", label: lvl.labelLiteral });
   if (context.periodIndex)
     items.push({ key: "periodIndex", label: `Periodo ${ROMAN[context.periodIndex - 1] ?? ""}` });
-  if (context.experienceCode && repo.maybeExperience(context.experienceCode))
-    items.push({
-      key: "experienceCode",
-      label: `${context.experienceCode} · ${repo.title(context.experienceCode)}`,
-    });
+  const exp = context.experienceCode
+    ? catalogExperience(catalog, context.experienceCode)
+    : undefined;
+  if (exp) items.push({ key: "experienceCode", label: `${exp.code} · ${exp.title.text}` });
   if (items.length === 0) {
     return <p className="muted context-empty">Sin contexto: Happy buscará en toda la malla.</p>;
   }
@@ -479,8 +668,17 @@ function ThreadList({ threads, onOpen }: { threads: Thread[]; onOpen: (id: strin
   );
 }
 
+const fmtSeconds = (ms: number) =>
+  `${(ms / 1000).toLocaleString("es-CO", { maximumFractionDigits: 1 })} s`;
+const fmtUsd = (usd: number) =>
+  usd === 0
+    ? "sin costo"
+    : `US$${usd.toLocaleString("es-CO", { minimumFractionDigits: 3, maximumFractionDigits: 4 })}`;
+
 export function ResponseView({
   response,
+  units,
+  metrics,
   pending = false,
   feedback,
   onFeedback,
@@ -489,6 +687,9 @@ export function ResponseView({
   onLand,
 }: {
   response: HappyResponse;
+  /** Literales de las unidades citadas (en producción llegan con la respuesta). */
+  units: Unit[];
+  metrics?: ThreadMessage["metrics"] | undefined;
   pending?: boolean;
   feedback?: "up" | "down" | undefined;
   onFeedback?: (v: "up" | "down") => void;
@@ -496,10 +697,20 @@ export function ResponseView({
   onAction?: (a: HappyResponse["nextActions"][number]) => void;
   onLand?: (title: string) => void;
 }) {
+  const { repo } = useApp();
+  const byId = useMemo(() => new Map(units.map((u) => [u.unitId, u])), [units]);
+  const resolve = (id: string): Unit | undefined => byId.get(id) ?? repo?.maybeUnit(id);
   return (
     <div className={`response${pending ? " response--pending" : ""}`}>
       {response.blocks.map((b, i) => (
-        <BlockView key={i} block={b} response={response} onSaveIdea={onSaveIdea} onLand={onLand} />
+        <BlockView
+          key={i}
+          block={b}
+          unit={b.kind === "malla_ref" ? resolve(b.unitId) : undefined}
+          response={response}
+          onSaveIdea={onSaveIdea}
+          onLand={onLand}
+        />
       ))}
       {!pending && response.nextActions.length > 0 && (
         <div className="response__actions">
@@ -535,6 +746,12 @@ export function ResponseView({
               onFeedback("down");
             }}
           />
+          {metrics && metrics.provider !== "policy" && (
+            <span className="metrics muted" data-testid="metrics">
+              {metrics.firstBlockMs !== null ? `${fmtSeconds(metrics.firstBlockMs)} · ` : ""}
+              {fmtUsd(metrics.costUsd)}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -543,29 +760,31 @@ export function ResponseView({
 
 function BlockView({
   block,
+  unit,
   response,
   onSaveIdea,
   onLand,
 }: {
   block: Block;
+  unit: Unit | undefined;
   response: HappyResponse;
   onSaveIdea?: ((title: string, text: string, r: HappyResponse) => void) | undefined;
   onLand?: ((title: string) => void) | undefined;
 }) {
-  const { navigate } = useApp();
-  const repo = useRepo();
+  const { navigate, catalog } = useApp();
   switch (block.kind) {
     case "malla_ref": {
-      const u = repo.maybeUnit(block.unitId);
-      if (!u) return null; // el validador ya lo impide; defensa adicional
+      const u = unit;
+      if (!u) return null; // el validador y el servidor ya lo impiden; defensa adicional
       const seg = block.segment ? u.segments?.find((s) => s.key === block.segment) : undefined;
       const text = seg ? u.text.slice(seg.valueStart, seg.valueEnd) : u.text;
       const segLabel = seg?.label;
+      const title = u.code ? catalogExperience(catalog, u.code)?.title.text : undefined;
       return (
         <section className="block block--malla" data-unit-id={u.unitId}>
           <p className="block__label">Desde nuestra malla…</p>
           <p className="block__where">
-            {u.code && <span className="code">{u.code}</span>} {u.code ? repo.title(u.code) : ""} ·{" "}
+            {u.code && <span className="code">{u.code}</span>} {title ?? ""} ·{" "}
             {shortHeader(u.headerLiteral)}
             {segLabel && ` · ${segLabel} (fragmento)`}
           </p>

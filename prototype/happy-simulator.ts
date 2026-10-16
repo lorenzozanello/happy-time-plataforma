@@ -50,11 +50,17 @@ export function createHappySimulator(
         allowedModes: V1_MODES,
       });
       if (!check.ok) throw new Error(`Respuesta inválida: ${check.errors.join("; ")}`);
+      const units = full.blocks.flatMap((b) =>
+        b.kind === "malla_ref" ? [repo.unit(b.unitId)] : [],
+      );
       for (let i = 1; i <= full.blocks.length; i++) {
-        onProgress({ ...full, blocks: full.blocks.slice(0, i), nextActions: [] });
+        onProgress({
+          response: { ...full, blocks: full.blocks.slice(0, i), nextActions: [] },
+          units,
+        });
         if (i < full.blocks.length) await sleep(controls.blockDelay);
       }
-      return full;
+      return { response: full, units };
     },
   };
 }

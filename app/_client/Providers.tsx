@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, type ReactNode } from "react";
 import type { Catalog, SearchBundle } from "../../src/domain/curriculum/views";
+import { isHappyResponseShape } from "../../src/domain/happy/shape";
 import { Shell } from "../../src/ui/Shell";
 import { AppProvider } from "../../src/ui/app/state";
 import { useNextNavigation } from "./navigation";
@@ -43,7 +44,8 @@ export function Providers({
       services={services}
       navigation={navigation}
       storageKey={STORAGE_KEY}
-      happyEnabled={false}
+      happyEnabled
+      checkResponse={isHappyResponseShape}
     >
       <Shell>{children}</Shell>
     </AppProvider>

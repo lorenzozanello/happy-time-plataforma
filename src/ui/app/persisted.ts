@@ -6,6 +6,7 @@
 import { LEVEL_IDS, type LevelId } from "../../domain/curriculum/fields";
 import { catalogExperience, type Catalog } from "../../domain/curriculum/views";
 import { isMode } from "../../domain/happy/modes";
+import { isMetricsShape, isUnitShape } from "../../domain/happy/shape";
 import type {
   Favorite,
   FavoriteTarget,
@@ -111,6 +112,13 @@ function message(v: unknown, isResponse: ResponseCheck): ThreadMessage | null {
   if (!isObj(v) || !str(v.id, 100) || !num(v.createdAt)) return null;
   if (v.role !== "docente" && v.role !== "happy") return null;
   if (v.response !== undefined && !isResponse(v.response)) return null;
+  // Literales citados: cada uno se valida; uno inválido descarta el mensaje entero (no se pinta a medias).
+  const units = arr(v.units);
+  if (
+    v.units !== undefined &&
+    (!Array.isArray(v.units) || units.length > 40 || !units.every(isUnitShape))
+  )
+    return null;
   return {
     id: v.id,
     role: v.role,
@@ -119,6 +127,8 @@ function message(v: unknown, isResponse: ResponseCheck): ThreadMessage | null {
     ...opt("mode", v.mode, isMode),
     ...opt("replyTo", v.replyTo, (x): x is string => str(x, 100)),
     ...(v.response !== undefined ? { response: v.response as ThreadMessage["response"] } : {}),
+    ...(v.units !== undefined ? { units: units as ThreadMessage["units"] } : {}),
+    ...opt("metrics", v.metrics, isMetricsShape),
     ...opt("error", v.error, (x): x is string => str(x, 1000)),
     ...(v.feedback === "up" || v.feedback === "down" ? { feedback: v.feedback } : {}),
   } as ThreadMessage;

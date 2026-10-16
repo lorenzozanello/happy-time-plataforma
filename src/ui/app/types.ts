@@ -1,4 +1,7 @@
 import type { LevelId } from "../../domain/curriculum/fields";
+import type { Unit } from "../../domain/curriculum/schema";
+import type { HappyMetrics } from "../../domain/happy/pipeline";
+import type { HistoryTurn } from "../../domain/happy/prompt";
 import type { HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
 
 export interface Session {
@@ -16,16 +19,53 @@ export interface HappyRequest {
   mode: Mode;
   message: string;
   context: HappyContext;
+  /** Últimos turnos del hilo (texto redactado), para que Happy mantenga el contexto. */
+  history?: HistoryTurn[];
 }
 
-/** Contrato de Happy (F5 lo implementa con /api/happy). Entrega bloques a medida que llegan. */
+/** Respuesta parcial o final de Happy con los literales de las unidades citadas. */
+export interface HappyPartial {
+  response: HappyResponse;
+  units: Unit[];
+}
+export interface HappyResult extends HappyPartial {
+  metrics?: HappyMetrics;
+}
+
+/** Errores de Happy que la interfaz distingue (el resto son errores genéricos con reintento). */
+export type HappyErrorCode = "access" | "disabled" | "limit" | "network" | "invalid";
+export class HappyError extends Error {
+  constructor(
+    readonly code: HappyErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "HappyError";
+  }
+}
+
+/** Contrato de Happy (F5: /api/happy). Entrega bloques a medida que llegan. */
 export interface HappyService {
-  respond(req: HappyRequest, onProgress: (partial: HappyResponse) => void): Promise<HappyResponse>;
+  respond(req: HappyRequest, onProgress: (partial: HappyPartial) => void): Promise<HappyResult>;
+}
+
+export interface HappyStatus {
+  enabled: boolean;
+  /** Hasta F4: la docente escribe una vez el código de acceso del piloto. */
+  needsCode: boolean;
+  hasCode: boolean;
+}
+
+/** Acceso provisional a Happy (F5, hasta la autenticación de F4). Ausente en el prototipo. */
+export interface HappyAccess {
+  status(): Promise<HappyStatus>;
+  setCode(code: string): void;
 }
 
 export interface Services {
   auth: AuthService;
   happy: HappyService;
+  happyAccess?: HappyAccess;
   /** Persistencia por navegador (prototipo). F4 la reemplaza por la base de datos. */
   storage: KeyValueStorage;
   /** Controles exclusivos del prototipo (ausentes en producción). */
@@ -78,6 +118,10 @@ export interface ThreadMessage {
   /** Respuesta o error: id del mensaje de la docente al que responde. */
   replyTo?: string;
   response?: HappyResponse;
+  /** Literales de las unidades citadas por la respuesta (la app no tiene la malla completa). */
+  units?: Unit[];
+  /** Métricas de la respuesta (modelo, tokens, costo, latencias), para la docente y para auditoría. */
+  metrics?: HappyMetrics;
   error?: string;
   feedback?: "up" | "down";
   createdAt: number;

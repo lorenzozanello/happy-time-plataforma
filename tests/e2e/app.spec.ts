@@ -255,7 +255,9 @@ test.describe("F3-05 · Fidelidad", () => {
 });
 
 test.describe("Datos del navegador", () => {
-  test("niveles y favoritos persisten al recargar; Happy aún no está", async ({ page }) => {
+  test("niveles y favoritos persisten al recargar; Happy pide el código del piloto", async ({
+    page,
+  }) => {
     await page.goto("/perfil");
     await page.locator(".check-card", { hasText: "Step 2" }).click();
     await page.getByRole("button", { name: "Guardar" }).click();
@@ -263,14 +265,14 @@ test.describe("Datos del navegador", () => {
 
     await page.goto("/malla/s2-1");
     await expect(
-      page.locator(".ficha__actions").getByRole("button", { name: /Pensemos/ }),
-    ).toHaveCount(0);
+      page.locator(".ficha__actions").getByRole("link", { name: /Pensemos/ }),
+    ).toHaveAttribute("href", "/happy?experiencia=S2.1");
     await page.getByRole("button", { name: "Guardar en favoritos" }).click();
     await expect(page.getByRole("button", { name: "Quitar de favoritos" })).toBeVisible();
 
     await page.goto("/");
     await expect(page.locator("main")).toContainText(unit("S2.1#titulo").text);
-    await expect(page.locator(".intent")).toHaveCount(0);
+    await expect(page.locator(".intent")).toHaveCount(3);
     await page.reload();
     await expect(page.getByRole("region", { name: "Favoritos" })).toContainText(
       unit("S2.1#titulo").text,
@@ -283,7 +285,7 @@ test.describe("Datos del navegador", () => {
     );
 
     await tab(page, "Happy").click();
-    await expect(page.getByRole("heading", { name: "Happy llega pronto" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Código de acceso" })).toBeVisible();
     await tab(page, "Guardados").click();
     await expect(page.locator(".exp-card")).toContainText(unit("S2.1#titulo").text);
   });

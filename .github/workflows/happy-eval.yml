@@ -1,0 +1,87 @@
+name: Happy · evaluación con modelo real
+
+# Corre la suite de Happy contra Claude API (F5-09). Requiere el secreto ANTHROPIC_API_KEY del
+# repositorio (Settings → Secrets and variables → Actions). Se lanza a mano; el reporte queda como
+# artefacto del workflow y en el resumen del job. No escribe en el repositorio.
+on:
+  workflow_dispatch:
+    inputs:
+      model_id:
+        description: "Modelo que responde (claude-sonnet-5-5, claude-haiku-5-5, …)"
+        default: "claude-sonnet-5-5"
+        required: true
+      effort:
+        description: "Esfuerzo (low | medium | high)"
+        default: "low"
+        required: true
+      judge:
+        description: "Juez de rúbrica (haiku | none)"
+        default: "haiku"
+        required: true
+      filter:
+        description: "Grupo o id para limitar la corrida (vacío = toda la suite)"
+        default: ""
+        required: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: happy-eval
+  cancel-in-progress: false
+
+jobs:
+  eval:
+    name: Suite de ${{ inputs.model_id }} (effort ${{ inputs.effort }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Comprobar el secreto
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "::error::Falta el secreto ANTHROPIC_API_KEY en el repositorio."
+            exit 1
+          fi
+
+      - name: Evaluar a Happy con el modelo real
+        id: eval
+        continue-on-error: true
+        run: >
+          npm run happy:eval --
+          --model anthropic
+          --model-id "${{ inputs.model_id }}"
+          --effort "${{ inputs.effort }}"
+          --judge "${{ inputs.judge }}"
+          ${{ inputs.filter != '' && format('--filter "{0}"', inputs.filter) || '' }}
+          --out evals/happy/reports/ci
+
+      - name: Publicar el resumen
+        if: always()
+        run: |
+          ls evals/happy/reports/ci/*.md >/dev/null 2>&1 && cat evals/happy/reports/ci/*.md >> "$GITHUB_STEP_SUMMARY" || echo "Sin reporte" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Guardar el reporte
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: happy-eval-${{ inputs.model_id }}-${{ github.run_number }}
+          path: evals/happy/reports/ci/
+          retention-days: 90
+
+      - name: Resultado
+        if: steps.eval.outcome == 'failure'
+        run: |
+          echo "::error::La suite no alcanzó la barra (duros 100 %, conducta 100 %, rúbrica ≥ 85 %, p75 ≤ 4 s)."
+          exit 1

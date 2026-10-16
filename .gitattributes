@@ -1,0 +1,3 @@
+# El Excel certificado es binario y nunca debe normalizarse
+*.xlsx binary
+curriculum/build/*.json -diff linguist-generated=true

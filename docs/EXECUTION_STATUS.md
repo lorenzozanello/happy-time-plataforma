@@ -1,19 +1,32 @@
 # EXECUTION_STATUS — Happy Time
 
-**Última actualización:** 2026-10-16
-**Fase actual:** F3 — Malla en producción (lista en el PR #3; falta solo el despliegue, OD-1) · F2 pendiente solo de revisión humana
-**Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe`
+**Última actualización:** 2026-10-16 (sesión 2)
+**Fase actual:** F5 — Happy núcleo (en curso, rama `f5-happy-nucleo`) · F3-09 y F2-09 siguen pendientes del owner
+**Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe` · Gate 0 de cada archivo recibido en `docs/GATE0_LOG.md`
 
 | Fase | Estado | Evidencia / bloqueo |
 |---|---|---|
 | F0 Baseline | ✅ Aprobado por el owner (2026-10-16, “Procede”) | `docs/ARCHITECTURE_BASELINE_v1.md` |
-| F1 Compilador curricular | ✅ Fusionado (PR #1) · ⏳ OD-5 para cierre formal | PR #1, CI verde |
+| F1 Compilador curricular | ✅ Fusionado (PR #1) · ✅ OD-5 respondida (owner + coordinación aprueban releases) | PR #1, CI verde |
 | F2 Diseño y prototipo | ✅ Fusionado (PR #2) · ⏳ revisión humana (F2-09) | Reloj provisional hasta OD-6 |
-| F3 Malla en producción | ✅ F3-01…F3-08 en el PR #3 · ⏳ F3-09 despliegue (OD-1) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
-| F4 Acceso y Guardados | ⏸ | OD-1, OD-3 |
-| F5 Happy núcleo | ⏸ | OD-2 |
+| F3 Malla en producción | ✅ F3-01…F3-08 fusionados (PR #3) · ⏳ F3-09 despliegue (owner conecta Vercel) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
+| F4 Acceso y Guardados | ⏸ desbloqueada por OD-1 y OD-3; requiere que el owner cree Neon y Resend (gratis) | ADR-016 |
+| F5 Happy núcleo | 🔧 en curso (esta sesión) | criterios F5-01…F5-12 abajo |
 | F6 Happy extendida | ⏸ | OD-4 |
 | F7 Endurecimiento y piloto | ⏸ | OD-8 |
+
+## Sesión 2 (2026-10-16) — punto de partida verificado
+
+- Clon limpio de `main` (`20148de`, PR #3 fusionado): `npm run verify` ✅ (typecheck, lint, 216 pruebas,
+  `curriculum:check`), `curriculum:gate` 22/22 ✅, validador Python 572 unidades / 592 celdas, 0 errores ✅.
+- Gate 0 del Excel recibido en esta sesión (`Malla_HT_Versión_Final_Junio_2026_3.xlsx`): huella distinta,
+  **contenido idéntico** celda a celda (638/638). Es una re-exportación; la release 2026-06 sigue vigente.
+  Detalle en `docs/GATE0_LOG.md`.
+- Respuestas del owner (registradas en `DECISIONS.md`): **OD-1** hosting sin costo; **OD-2** Claude API
+  (tope mensual por definir en cifra; mientras tanto US$20 configurable); **OD-3** 3 roles, el owner es
+  admin, acceso por invitación; **OD-5** el owner **y** coordinación académica aprueban releases de la malla.
+- Orden de fases ajustado: F5 (Happy) antes que F4 (acceso) porque no depende de cuentas externas y es el
+  corazón del producto; `/api/happy` queda protegida por un código de acceso del piloto hasta F4 (ADR-017).
 
 ## F1 — Criterios de prueba (definidos antes de implementar)
 
@@ -125,13 +138,56 @@ Revisión adversarial independiente de F3 (corregida en el mismo PR): **medio-al
 
 Limitaciones conocidas: `/malla` depende del JavaScript para mostrar la experiencia (2,9 s en el perfil lento; mejora posible pre-generando por nivel en F7). `next start` no comprime el JSON de búsqueda (407 KB; ~68 KB con gzip): Vercel lo comprime en el borde; en autoalojamiento debe hacerlo el proxy. En `next start`, cada 404 de ruta dinámica deja un `NoFallbackError` en el registro del servidor (comportamiento de Next, sin efecto para la docente).
 
+## F5 — Criterios de prueba (definidos antes de implementar)
+
+**Objetivo:** Happy real en la app de producción para encontrar, conectar y aterrizar la malla:
+`/api/happy` con Claude API, salida estructurada, streaming por bloques, cita por referencia (el servidor
+entrega el literal de cada unidad citada), políticas de entrada y salida **en el servidor**, caché de
+prompt, medición de latencia y costo por respuesta, límites de uso, suite de evaluación de ≥70 escenarios
+ejecutable con modelo falso (CI) y con modelo real (workflow manual con la clave en secretos), y estados
+del avatar ligados a eventos reales del stream.
+
+**Supuestos:**
+- OD-2: Claude API. Modelo por defecto `claude-sonnet-5-5` para responder (configurable por variable de
+  entorno); `claude-haiku-5-5` solo como juez de la rúbrica en la suite. Tope mensual **configurable**
+  (`HAPPY_MONTHLY_BUDGET_USD`, por defecto 20 hasta que el owner fije la cifra) más un tope duro en la
+  consola de Anthropic que fija el owner. La clave nunca pasa por el chat: va a *Settings → Secrets* del
+  repositorio (`ANTHROPIC_API_KEY`) y a las variables de entorno del hosting.
+- Sin autenticación hasta F4: `/api/happy` exige un **código de acceso del piloto** (`HAPPY_ACCESS_CODE`)
+  que la docente escribe una vez en su teléfono; además, límites por dispositivo y globales. Sin código
+  configurado en producción, Happy responde «no habilitada».
+- Sin base de datos hasta F4: los hilos siguen en el navegador (como los favoritos en F3); el cliente
+  envía al servidor los últimos turnos redactados como contexto; las métricas de cada respuesta viajan al
+  cliente y a los registros del servidor (JSON por línea). Los contadores de límite son por instancia.
+- Modelo falso determinista (`HAPPY_MODEL=fake`) para CI, e2e y la suite sin clave: produce JSON válido
+  por trozos con unidades reales recuperadas; nunca diagnostica ni reclama autoridad. Con él, la suite
+  mide solo los criterios estructurales; los criterios de conducta se miden con el modelo real.
+
+| ID | Criterio | Cómo se verifica |
+|---|---|---|
+| F5-01 | Contrato de `/api/happy` | `POST` con `{mode, message, context, history}` → `application/x-ndjson` con eventos `meta` (unidades recuperadas), `block` (bloque validado + literales citados), `reset`, `done` (respuesta completa + métricas) y `error`; cuerpo inválido → 400 en español. Pruebas unitarias del pipeline y e2e con modelo falso |
+| F5-02 | Política de entrada en el servidor | Privacidad (misma política que el cliente): mensaje con datos identificables → `notice privacy` **sin llamar al modelo** y sin registrar el original; el texto de la docente va al modelo como datos delimitados, nunca como instrucciones |
+| F5-03 | Recuperación determinista | Siempre las 7 Observaciones; progresión del nivel; los 24 campos + título de la experiencia activa; mejores coincidencias léxicas filtradas por nivel; preguntas de nivel sin experiencia → títulos y alcances del nivel. Conjunto acotado y registrado en `meta.retrieved` |
+| F5-04 | Composer con caché de prompt | `prompts/happy.system.v1.md` versionado; bloque estable (system + Observaciones) con `cache_control` 1 h; bloque de nivel/experiencia con `cache_control` 5 min; coincidencias y turno en el mensaje. Prueba unitaria sobre la petición construida (cliente de modelo que la registra) |
+| F5-05 | Streaming por bloques | Parser incremental que emite cada bloque al cerrarse (probado cortando el JSON en todas las posiciones); el cliente pinta bloques parciales; avatar: *Piensa* al enviar → *Idea* con el primer bloque → *Resultado* al cerrar. e2e verifica los tres estados con tiempos del modelo falso |
+| F5-06 | Validador de salida en el servidor | Cada bloque: esquema, `unitId` ∈ recuperados, segmento existente, sin autoridad, sin diagnóstico/calificación, sin copia literal (ventana de 8 palabras); respuesta: ≤3 caminos, modo habilitado. Bloque inválido → se descarta y se cuenta; respuesta vacía o esquema roto → **un** reintento con los errores como retroalimentación; si persiste → `error` |
+| F5-07 | Cita por referencia de punta a punta | La respuesta incluye solo las unidades citadas (literal + procedencia); la UI pinta el literal desde ahí; prueba e2e compara cada `[data-unit-id]` con el JSON compilado; `app:check-bundle` sigue en 0 secuencias en el cliente; anti-hardcode cubre `prompts/` y `evals/` |
+| F5-08 | Costo, latencia y límites | Cada respuesta registra `model`, `prompt_version`, `release`, tokens (entrada, caché leída/escrita, salida), costo estimado USD, latencia al primer bloque y total; límites por código/dispositivo y globales por día, y tope mensual → aviso amable sin llamar al modelo. Pruebas unitarias del estimador y de los límites |
+| F5-09 | Suite de evaluación | `evals/happy/scenarios.v1.json` con ≥70 escenarios (incl. adversariales: autismo, nota, informe con TDAH, ignorar instrucciones, nivel inexistente, idea sin conexión real); `npm run happy:eval` → reporte JSON+Markdown con criterios duros (100 % exigido), rúbrica (juez Haiku, ≥85 %), p75 primer bloque, costo medio. Con modelo falso corre en CI (estructural); con `ANTHROPIC_API_KEY` corre el workflow manual `happy-eval` |
+| F5-10 | Acceso provisional | Sin código → 401; código incorrecto → 401; con código → stream; sin `HAPPY_ACCESS_CODE` en producción → 503 «no habilitada». CSP y cabeceras intactas. e2e |
+| F5-11 | Accesibilidad y móvil | `/happy` y una conversación: axe sin violaciones serias en claro y oscuro a 360 px; objetivos ≥44 px; sin scroll horizontal; foco |
+| F5-12 | Calidad y cierre | `npm run verify`, `test:e2e`, `app:build`, `app:check-bundle`, `test:e2e:app` en verde; docs actualizados; revisión adversarial independiente corregida; **un solo push**, PR #4 |
+
 ## Decisiones abiertas del owner
-OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
-OD-7 resuelta: repositorio `lorenzozanello/happy-time-plataforma`.
+OD-2 **cifra** del tope mensual · OD-4 datos de menores · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
+Resueltas: OD-1 (hosting sin costo, ADR-016), OD-3 (3 roles, owner admin), OD-5 (owner + coordinación), OD-7 (repositorio).
 Recomendado: activar protección de `main` (PR obligatorio + CI verde + code owners).
 Pendiente H-01: confirmación del hash contra un registro externo al ZIP.
 
 ## Próximo paso
-1. Owner: conectar el repositorio a Vercel (OD-1) para la vista previa por PR (cierra F3-09).
-2. Owner + 2–3 docentes: recorrer el prototipo o la vista previa en móvil (cierra F2-09).
-3. F4 (acceso y Guardados en servidor) espera OD-1 y OD-3.
+1. Owner: `ANTHROPIC_API_KEY` en *Settings → Secrets and variables → Actions* del repositorio y tope de gasto
+   en la consola de Anthropic; con eso corre `happy-eval` con el modelo real.
+2. Owner: crear el proyecto en Vercel (plan Hobby) conectado al repositorio y poner `ANTHROPIC_API_KEY` y
+   `HAPPY_ACCESS_CODE` como variables de entorno (cierra F3-09 y habilita Happy en la vista previa).
+3. Owner + 2–3 docentes: recorrer la vista previa en móvil (cierra F2-09).
+4. F4 (acceso, guardados y métricas en servidor) con Neon + Resend (gratis): el owner crea ambas cuentas.

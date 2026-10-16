@@ -17,7 +17,7 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 **Consecuencias:** cero credenciales de Google en v1; páginas de malla estáticas; un cambio curricular requiere un PR y un despliegue (deseable: deja rastro y revisión).
 
 ## ADR-003 — Releases curriculares inmutables con aprobación del owner
-**Estado:** Propuesta · confirmar responsables en OD-5
+**Estado:** Aceptada (OD-5 respondida el 2026-10-16: aprueban el **owner y coordinación académica**; se reflejará como dos revisiones requeridas en la protección de `main` para `curriculum/source/`)
 **Contexto:** el handoff pide malla “editable desde fuente única” y a la vez Excel inmutable; el XLSX certificado es una exportación de Google Sheets.
 **Decisión:** la edición ocurre aguas arriba. Cada XLSX exportado entra como nueva release (`malla-<AAAA-MM>.xlsx`) mediante PR con gate, compilación y reporte de diferencias por unidad. El owner aprueba. La app **no** edita currículo.
 **Consecuencias:** historial completo de versiones; los guardados registran `release` y `unitId` y pueden avisar cambios.
@@ -29,7 +29,7 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 **Consecuencias:** un único formato de ID en todo el código, base de datos y URLs.
 
 ## ADR-005 — Stack: Next.js + Supabase + Vercel + GitHub
-**Estado:** Propuesta · confirmar en OD-1
+**Estado:** Reemplazada en la parte de hosting y datos por ADR-016 (OD-1: «opciones que no me cuesten»). Next.js, GitHub Actions y Claude API se mantienen.
 **Decisión:** Next.js (App Router, TypeScript strict, Tailwind, Zod) desplegado en Vercel; Supabase (Postgres + RLS + Auth OTP por correo con invitación, SMTP propio); GitHub Actions para CI.
 **Alternativas:** Vite SPA + funciones (más piezas); Google Sheets + Apps Script (histórico; sin transacciones ni RLS); Service Account (histórico; innecesaria con ADR-002).
 **Consecuencias:** las decisiones históricas Apps Script / Service Account quedan explícitamente **no heredadas**. Respuesta a las 6 preguntas del handoff §10: (1) currículo: repo, compilado; (2) usuarios y sesiones: Supabase Auth; (3) conversaciones, favoritos, planeaciones: Supabase Postgres; (4) autenticación: código OTP al correo, solo invitación; (5) acceso a Drive/Sheets: ninguno en runtime; solo el owner exporta releases; (6) secretos: Claude API key y service role en Vercel, SMTP en Supabase.
@@ -47,8 +47,8 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 **Consecuencias:** la trazabilidad es estructural, no depende del comportamiento del modelo.
 
 ## ADR-008 — Happy usa Claude API server-side con salida estructurada
-**Estado:** Pendiente owner (OD-2)
-**Decisión propuesta:** Claude API desde el route handler `/api/happy`; salida JSON validada por Zod; streaming por bloques; caché de prompt; modelo concreto fijado tras evaluación con la suite de F5; `model` y `prompt_version` registrados por mensaje. Gemini (histórico) no se hereda.
+**Estado:** Aceptada (OD-2 respondida el 2026-10-16: Claude API; la **cifra** del tope mensual sigue pendiente)
+**Decisión:** Claude API desde el route handler `/api/happy`; salida JSON con `output_config.format` (esquema estricto) validada después por Zod y por el validador de política; streaming por bloques; caché de prompt; modelo por defecto `claude-sonnet-5-5` (configurable; `claude-haiku-5-5` como juez de la suite) y confirmado con la suite de F5; `model` y `prompt_version` registrados por respuesta. La clave vive en secretos de GitHub Actions y del hosting, nunca en el repositorio ni en el chat. Tope duro de gasto en la consola de Anthropic (owner) + tope blando en la app (`HAPPY_MONTHLY_BUDGET_USD`). Gemini (histórico) no se hereda. Detalles de implementación: ADR-017.
 
 ## ADR-009 — Sin datos identificables de menores en v1
 **Estado:** Pendiente owner (OD-4)
@@ -110,3 +110,14 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 - **Tipografías alojadas** (Fontsource vía `next/font/local`): sin peticiones a terceros, con precarga y fallback ajustado.
 - **Verificación sobre la salida real:** `scripts/check-app-bundle.ts` comprueba que ningún JavaScript del cliente contiene texto curricular y que cada HTML/RSC pre-generado lleva solo las unidades de su página (más el catálogo).
 - **Happy y Guardados en servidor** quedan para F5/F4: en la app, Happy muestra «Happy llega pronto» y los favoritos viven en el navegador.
+
+## ADR-016 — Hosting y datos sin costo para el piloto (OD-1)
+**Estado:** Aceptada (2026-10-16; el owner pidió «opciones que no me cuesten»)
+**Contexto:** el piloto son 5–10 docentes; el tráfico es bajo y esporádico (entre actividades). Supabase gratuito **pausa** los proyectos tras 7 días sin uso (vacaciones escolares) y hay que reactivarlos a mano; eso es un riesgo operativo para una herramienta diaria.
+**Decisión:**
+- **App:** Vercel, plan Hobby (US$0). Renderizado en servidor, streaming y funciones con el límite de duración del plan, suficiente para Happy (respuestas ≤ 30 s). **Riesgo:** los términos del plan Hobby lo reservan a uso personal/no comercial; una institución educativa puede quedar fuera. Si Vercel lo objeta, la alternativa sin costo con uso comercial permitido es Cloudflare Workers (adaptador OpenNext); la app no depende de nada exclusivo de Vercel.
+- **Datos (F4):** Neon, plan gratuito (Postgres gestionado, 0,5 GB, se suspende y **reanuda sola** en ~1 s). Migraciones SQL y RLS en el repo; en CI se prueban con PGlite (Postgres en WebAssembly, sin servicio).
+- **Correo OTP (F4):** Resend, plan gratuito (3 000 correos/mes, 100/día) con dominio propio (SPF/DKIM). Código de 6 dígitos implementado en la app (sin Auth.js ni Supabase Auth).
+- **IA:** Claude API con tope de gasto en la consola (ADR-008). Es el único costo variable del piloto.
+- **Lo que el owner crea** (una vez): proyecto en Vercel conectado al repositorio; proyecto en Neon; cuenta en Resend; secretos en GitHub Actions y variables en Vercel.
+**Consecuencias:** cero costo fijo; límites de plan que se vigilan en F7 (bandwidth, filas, correos); sin Supabase Auth, el modelo de sesiones es propio (cookies `HttpOnly`, rate limit, auditoría) y queda bajo pruebas en F4.

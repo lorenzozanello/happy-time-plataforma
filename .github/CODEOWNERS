@@ -1,0 +1,5 @@
+# Cambios en la fuente curricular, su contrato o el validador independiente requieren revisión del owner (ADR-003).
+/curriculum/source/                         @lorenzozanello
+/curriculum/aliases/                        @lorenzozanello
+/scripts/curriculum/independent/            @lorenzozanello
+/src/domain/curriculum/fields.ts            @lorenzozanello

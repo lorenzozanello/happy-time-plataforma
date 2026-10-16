@@ -1,0 +1,40 @@
+{
+  "$comment": "Derivado y versionado (ADR-004). Mapea los literales de nivel de la fuente a IDs canónicos. No es autoridad curricular.",
+  "levels": [
+    {
+      "id": "step-1",
+      "codePrefix": "S1",
+      "mallaLabel": "Step 1",
+      "progresionLabel": "Step 1",
+      "aliases": ["Step 1", "Maternal", "step1", "step_1"]
+    },
+    {
+      "id": "step-2",
+      "codePrefix": "S2",
+      "mallaLabel": "Step 2",
+      "progresionLabel": "Step 2",
+      "aliases": ["Step 2", "Párvulo", "step2", "step_2"]
+    },
+    {
+      "id": "step-3",
+      "codePrefix": "S3",
+      "mallaLabel": "Step 3",
+      "progresionLabel": "Step 3",
+      "aliases": ["Step 3", "Prejardín", "Step 3 / Prejardín", "step3", "step_3"]
+    },
+    {
+      "id": "kinder",
+      "codePrefix": "K",
+      "mallaLabel": "Kínder",
+      "progresionLabel": "Jardín/Kínder",
+      "aliases": ["Kínder", "Jardín", "Jardín/Kínder", "Kínder / Jardín", "Kinder"]
+    },
+    {
+      "id": "transicion",
+      "codePrefix": "T",
+      "mallaLabel": "Transición",
+      "progresionLabel": "Transición",
+      "aliases": ["Transición", "Transicion"]
+    }
+  ]
+}

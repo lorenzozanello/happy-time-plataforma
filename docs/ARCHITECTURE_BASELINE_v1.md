@@ -249,7 +249,7 @@ WCAG 2.2 AA · desde 360 px sin desplazamiento horizontal · objetivos táctiles
   /aliases/levels.json                ← alias de nivel (derivado, versionado)
 /scripts/curriculum
   gate.ts  compile.ts  diff.ts         ← TypeScript
-  gate0.py                             ← validador independiente (segunda lectura)
+  independent/verify_independent.py    ← validador independiente (segunda lectura, Python)
 /src
   /app                                 ← rutas: (auth), inicio, malla, happy, guardados
   /components  /design-system
@@ -282,7 +282,7 @@ XLSX ─► Gate (hash, hojas, rangos de contenido, filas 22+ vacías, 33 encabe
      ─► Extracción (por encabezado literal, resolviendo rangos combinados A–G)
      ─► Esquema canónico (Zod) ─► Segmentación derivada verificada (P–S, K, AD)
      ─► curriculum.<release>.json + search-index + reporte de compilación
-     ─► Segunda lectura independiente (gate0.py con openpyxl) debe coincidir en conteos y textos
+     ─► Segunda lectura independiente (verify_independent.py con openpyxl): textos, atribución y estructuras
 ```
 
 ### 6.3 Esquema canónico (resumen)

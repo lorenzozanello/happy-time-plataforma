@@ -1,0 +1,408 @@
+{
+  "release": "2026-06",
+  "source": {
+    "file": "curriculum/source/malla-2026-06.xlsx",
+    "sha256": "4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe"
+  },
+  "gate": {
+    "pass": true,
+    "checks": [
+      {
+        "id": "G01",
+        "description": "SHA-256 de la fuente",
+        "expected": "4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe",
+        "actual": "4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe",
+        "pass": true
+      },
+      {
+        "id": "G02",
+        "description": "Tamaño en bytes",
+        "expected": 130388,
+        "actual": 130388,
+        "pass": true
+      },
+      {
+        "id": "G03",
+        "description": "Hojas: nombres exactos y orden",
+        "expected": [
+          "Malla ajustada",
+          "Observaciones",
+          "Progresión por dimensión"
+        ],
+        "actual": [
+          "Malla ajustada",
+          "Observaciones",
+          "Progresión por dimensión"
+        ],
+        "pass": true
+      },
+      {
+        "id": "G04",
+        "description": "Rango de contenido Malla",
+        "expected": "A1:AG21",
+        "actual": "A1:AG21",
+        "pass": true
+      },
+      {
+        "id": "G05",
+        "description": "Rango de contenido Observaciones",
+        "expected": "A1:A8",
+        "actual": "A1:A8",
+        "pass": true
+      },
+      {
+        "id": "G06",
+        "description": "Rango de contenido Progresión",
+        "expected": "A1:G6",
+        "actual": "A1:G6",
+        "pass": true
+      },
+      {
+        "id": "G07",
+        "description": "Celdas no vacías Malla A1:AG21",
+        "expected": 588,
+        "actual": 588,
+        "pass": true
+      },
+      {
+        "id": "G08",
+        "description": "Celdas no vacías Malla filas 2–21",
+        "expected": 555,
+        "actual": 555,
+        "pass": true
+      },
+      {
+        "id": "G09",
+        "description": "33 encabezados literales de Malla",
+        "expected": [
+          "Nivel",
+          "Ciclo normativo",
+          "Equivalencia",
+          "Edad de entrada aprox.",
+          "Edad de salida aprox.",
+          "Perfil de entrada sintetizado",
+          "Perfil de salida sintetizado",
+          "Periodo / código",
+          "Experiencia integradora",
+          "Alcance de la experiencia integradora",
+          "Propósitos esenciales",
+          "Momento de Indagar",
+          "Momento de Proyectar",
+          "Momento de Vivir la experiencia",
+          "Momento de Valorar el proceso",
+          "Juego: tema, competencia, avance y evidencia",
+          "Exploración del medio: tema, competencia, avance y evidencia",
+          "Literatura: tema, competencia, avance y evidencia",
+          "Arte: tema, competencia, avance y evidencia",
+          "Núcleos de experiencia",
+          "Saberes y nociones movilizadas",
+          "Competencias de desarrollo",
+          "Evidencias pedagógicas integradas",
+          "Diferenciación, DUA, apoyos razonables y PIAR cuando aplique",
+          "Contexto Caribe",
+          "GIRE",
+          "Procesos imprescindibles",
+          "Ambientes saludables",
+          "Indicadores de desarrollo",
+          "Documentación pedagógica y alertas",
+          "Eje de Educación Emocional",
+          "Alianza familia-escuela",
+          "Observación y valoración"
+        ],
+        "actual": [
+          "Nivel",
+          "Ciclo normativo",
+          "Equivalencia",
+          "Edad de entrada aprox.",
+          "Edad de salida aprox.",
+          "Perfil de entrada sintetizado",
+          "Perfil de salida sintetizado",
+          "Periodo / código",
+          "Experiencia integradora",
+          "Alcance de la experiencia integradora",
+          "Propósitos esenciales",
+          "Momento de Indagar",
+          "Momento de Proyectar",
+          "Momento de Vivir la experiencia",
+          "Momento de Valorar el proceso",
+          "Juego: tema, competencia, avance y evidencia",
+          "Exploración del medio: tema, competencia, avance y evidencia",
+          "Literatura: tema, competencia, avance y evidencia",
+          "Arte: tema, competencia, avance y evidencia",
+          "Núcleos de experiencia",
+          "Saberes y nociones movilizadas",
+          "Competencias de desarrollo",
+          "Evidencias pedagógicas integradas",
+          "Diferenciación, DUA, apoyos razonables y PIAR cuando aplique",
+          "Contexto Caribe",
+          "GIRE",
+          "Procesos imprescindibles",
+          "Ambientes saludables",
+          "Indicadores de desarrollo",
+          "Documentación pedagógica y alertas",
+          "Eje de Educación Emocional",
+          "Alianza familia-escuela",
+          "Observación y valoración"
+        ],
+        "pass": true
+      },
+      {
+        "id": "G10",
+        "description": "35 rangos combinados A–G por nivel",
+        "expected": [
+          "A10:A13",
+          "A14:A17",
+          "A18:A21",
+          "A2:A5",
+          "A6:A9",
+          "B10:B13",
+          "B14:B17",
+          "B18:B21",
+          "B2:B5",
+          "B6:B9",
+          "C10:C13",
+          "C14:C17",
+          "C18:C21",
+          "C2:C5",
+          "C6:C9",
+          "D10:D13",
+          "D14:D17",
+          "D18:D21",
+          "D2:D5",
+          "D6:D9",
+          "E10:E13",
+          "E14:E17",
+          "E18:E21",
+          "E2:E5",
+          "E6:E9",
+          "F10:F13",
+          "F14:F17",
+          "F18:F21",
+          "F2:F5",
+          "F6:F9",
+          "G10:G13",
+          "G14:G17",
+          "G18:G21",
+          "G2:G5",
+          "G6:G9"
+        ],
+        "actual": [
+          "A10:A13",
+          "A14:A17",
+          "A18:A21",
+          "A2:A5",
+          "A6:A9",
+          "B10:B13",
+          "B14:B17",
+          "B18:B21",
+          "B2:B5",
+          "B6:B9",
+          "C10:C13",
+          "C14:C17",
+          "C18:C21",
+          "C2:C5",
+          "C6:C9",
+          "D10:D13",
+          "D14:D17",
+          "D18:D21",
+          "D2:D5",
+          "D6:D9",
+          "E10:E13",
+          "E14:E17",
+          "E18:E21",
+          "E2:E5",
+          "E6:E9",
+          "F10:F13",
+          "F14:F17",
+          "F18:F21",
+          "F2:F5",
+          "F6:F9",
+          "G10:G13",
+          "G14:G17",
+          "G18:G21",
+          "G2:G5",
+          "G6:G9"
+        ],
+        "pass": true
+      },
+      {
+        "id": "G11",
+        "description": "Celdas interiores de rangos combinados vacías",
+        "expected": [],
+        "actual": [],
+        "pass": true
+      },
+      {
+        "id": "G12",
+        "description": "5 niveles con etiqueta",
+        "expected": 5,
+        "actual": 5,
+        "pass": true
+      },
+      {
+        "id": "G13",
+        "description": "20 códigos de periodo en orden",
+        "expected": [
+          "S1.1",
+          "S1.2",
+          "S1.3",
+          "S1.4",
+          "S2.1",
+          "S2.2",
+          "S2.3",
+          "S2.4",
+          "S3.1",
+          "S3.2",
+          "S3.3",
+          "S3.4",
+          "K.1",
+          "K.2",
+          "K.3",
+          "K.4",
+          "T.1",
+          "T.2",
+          "T.3",
+          "T.4"
+        ],
+        "actual": [
+          "S1.1",
+          "S1.2",
+          "S1.3",
+          "S1.4",
+          "S2.1",
+          "S2.2",
+          "S2.3",
+          "S2.4",
+          "S3.1",
+          "S3.2",
+          "S3.3",
+          "S3.4",
+          "K.1",
+          "K.2",
+          "K.3",
+          "K.4",
+          "T.1",
+          "T.2",
+          "T.3",
+          "T.4"
+        ],
+        "pass": true
+      },
+      {
+        "id": "G14",
+        "description": "Códigos únicos",
+        "expected": 20,
+        "actual": 20,
+        "pass": true
+      },
+      {
+        "id": "G15",
+        "description": "Sin vacíos en H–AG (filas 2–21)",
+        "expected": [],
+        "actual": [],
+        "pass": true
+      },
+      {
+        "id": "G16",
+        "description": "Encabezado Observaciones",
+        "expected": "Observaciones",
+        "actual": "Observaciones",
+        "pass": true
+      },
+      {
+        "id": "G17",
+        "description": "7 observaciones (A2:A8)",
+        "expected": 7,
+        "actual": 7,
+        "pass": true
+      },
+      {
+        "id": "G18",
+        "description": "Encabezados de Progresión",
+        "expected": [
+          "Dimensión",
+          "Cognitiva",
+          "Comunicativa",
+          "Socioemocional",
+          "Corporal",
+          "Estética",
+          "Ético-moral"
+        ],
+        "actual": [
+          "Dimensión",
+          "Cognitiva",
+          "Comunicativa",
+          "Socioemocional",
+          "Corporal",
+          "Estética",
+          "Ético-moral"
+        ],
+        "pass": true
+      },
+      {
+        "id": "G19",
+        "description": "Etiquetas de nivel en Progresión",
+        "expected": [
+          "Step 1",
+          "Step 2",
+          "Step 3",
+          "Jardín/Kínder",
+          "Transición"
+        ],
+        "actual": [
+          "Step 1",
+          "Step 2",
+          "Step 3",
+          "Jardín/Kínder",
+          "Transición"
+        ],
+        "pass": true
+      },
+      {
+        "id": "G20",
+        "description": "30 contenidos de progresión (B2:G6)",
+        "expected": 30,
+        "actual": 30,
+        "pass": true
+      },
+      {
+        "id": "G21",
+        "description": "Solo celdas de texto (sin fórmulas ni números)",
+        "expected": [],
+        "actual": [],
+        "pass": true
+      },
+      {
+        "id": "G22",
+        "description": "Sin celdas solo con espacios",
+        "expected": [],
+        "actual": [],
+        "pass": true
+      }
+    ],
+    "info": {
+      "levelLabels": [
+        "Step 1",
+        "Step 2",
+        "Step 3",
+        "Kínder",
+        "Transición"
+      ],
+      "xmlRowCount": {
+        "Malla ajustada": 1000,
+        "Observaciones": 8,
+        "Progresión por dimensión": 6
+      },
+      "cellsWithEdgeWhitespace": []
+    }
+  },
+  "counts": {
+    "units": 572,
+    "experienceFields": 480,
+    "experienceTitles": 20,
+    "levelFields": 35,
+    "observations": 7,
+    "progression": 30
+  },
+  "warnings": []
+}

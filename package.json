@@ -1,0 +1,39 @@
+{
+  "name": "happy-time-plataforma",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Plataforma Curricular Happy Time y asistente pedagógica Happy",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "vitest run",
+    "curriculum:gate": "tsx scripts/curriculum/cli.ts gate",
+    "curriculum:compile": "tsx scripts/curriculum/cli.ts compile",
+    "curriculum:check": "tsx scripts/curriculum/cli.ts check",
+    "curriculum:diff": "tsx scripts/curriculum/cli.ts diff",
+    "curriculum:verify-independent": "python3 -I scripts/curriculum/independent/verify_independent.py curriculum/source/SOURCE.lock.json",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run curriculum:check"
+  },
+  "dependencies": {
+    "fast-xml-parser": "5.11.2",
+    "fflate": "0.8.3",
+    "minisearch": "7.2.0",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "22.20.5",
+    "eslint": "10.13.0",
+    "prettier": "3.9.10",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.71.2",
+    "vitest": "5.0.5"
+  }
+}

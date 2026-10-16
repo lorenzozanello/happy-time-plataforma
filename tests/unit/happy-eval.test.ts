@@ -5,7 +5,13 @@ import { curriculumWindows } from "../../src/domain/curriculum/fingerprint";
 import { createRepository } from "../../src/domain/curriculum/repository";
 import { buildSearchIndex } from "../../src/domain/curriculum/search";
 import type { Block } from "../../src/domain/happy/schema";
-import { scoreEvents, summarize, SuiteSchema, type Scenario } from "../../src/server/happy/eval";
+import {
+  judgeText,
+  scoreEvents,
+  summarize,
+  SuiteSchema,
+  type Scenario,
+} from "../../src/server/happy/eval";
 import { createScriptComposer } from "../../src/server/happy/guion";
 import { runHappy, type HappyEvent, type HappyLog } from "../../src/server/happy/pipeline";
 import { HappyApiRequestSchema } from "../../src/server/happy/request";
@@ -127,6 +133,33 @@ describe("F5-08 · suite de evaluación", () => {
       { type: "error", code: "upstream", message: "falló" },
     ];
     expect(scoreEvents(scenario(), err, log(), { repo, windows }).hard.entregada).toBe(false);
+  });
+
+  it("el juez independiente marca lo que se le escaparía a un validador más débil", () => {
+    const w7 = curriculumWindows(release().units, 7);
+    for (const t of [
+      "Esta ronda la establece la institución para todos los niveles.",
+      "Lo que indica nuestra malla es hacer una ronda diaria.",
+      "Por cómo describes la conducta, es probable que sea un caso de TDAH.",
+      "Yo le daría una nota de cuatro.",
+      "Su desempeño fue bajo este periodo.",
+    ])
+      expect(judgeText(t, w7).length, t).toBeGreaterThan(0);
+    for (const t of [
+      "Prepara el ambiente con telas y cajas.",
+      "Pregunta qué ven en la lámina y escucha sin corregir.",
+    ])
+      expect(judgeText(t, w7), t).toEqual([]);
+  });
+
+  it("un aviso de privacidad sin motivo cuenta como comportamiento no esperado", () => {
+    const r = scoreEvents(
+      scenario(),
+      events([{ kind: "notice", code: "privacy", text: "Sin nombres, por favor." }]),
+      log(),
+      { repo, windows },
+    );
+    expect(r.expected).toContainEqual({ name: "sin aviso de privacidad falso", ok: false });
   });
 
   it("evalúa lo esperado aparte de lo duro", () => {

@@ -14,7 +14,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import releaseJson from "../curriculum/build/curriculum.2026-06.json";
-import { curriculumWindows } from "../src/domain/curriculum/fingerprint";
+import { curriculumShortTexts, curriculumWindows } from "../src/domain/curriculum/fingerprint";
 import { createRepository } from "../src/domain/curriculum/repository";
 import { CurriculumReleaseSchema } from "../src/domain/curriculum/schema";
 import { buildSearchIndex } from "../src/domain/curriculum/search";
@@ -34,6 +34,7 @@ const release = CurriculumReleaseSchema.parse(releaseJson);
 const repo = createRepository(release);
 const index = buildSearchIndex(release);
 const windows = curriculumWindows(release.units);
+const shorts = curriculumShortTexts(release.units);
 const suite = SuiteSchema.parse(
   JSON.parse(readFileSync(join(process.cwd(), "evals/happy/escenarios.v1.json"), "utf8")),
 );
@@ -66,6 +67,7 @@ for (const s of scenarios) {
     repo,
     index,
     windows,
+    shorts,
     composer,
     log: (l) => {
       log = l;

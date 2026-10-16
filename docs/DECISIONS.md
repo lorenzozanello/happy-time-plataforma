@@ -110,3 +110,14 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 - **Tipografías alojadas** (Fontsource vía `next/font/local`): sin peticiones a terceros, con precarga y fallback ajustado.
 - **Verificación sobre la salida real:** `scripts/check-app-bundle.ts` comprueba que ningún JavaScript del cliente contiene texto curricular y que cada HTML/RSC pre-generado lleva solo las unidades de su página (más el catálogo).
 - **Happy y Guardados en servidor** quedan para F5/F4: en la app, Happy muestra «Happy llega pronto» y los favoritos viven en el navegador.
+
+## ADR-016 — Núcleo de Happy en el servidor (F5)
+**Estado:** Aceptada (2026-10-16), con la recomendación de OD-2 (Claude API) pendiente de confirmación del owner.
+**Decisión:**
+- **Pipeline en `src/server/happy/`**, independiente de Next.js y probado sin servidor: política de entrada → contexto → intención → recuperación determinista → composer → validación por bloque → eventos NDJSON. `/api/happy` solo lo conecta.
+- **Composer intercambiable** (`Composer`): adaptador de Claude con `@anthropic-ai/sdk` (streaming, caché del prompt de sistema y del bloque de unidades, sin reintentos del SDK: el pipeline reintenta una vez → ≤2 llamadas por solicitud) y composer de **guion** solo para pruebas (exige `HAPPY_TEST_MODE=1` y que no sea un despliegue de Vercel). Modelo por `HAPPY_MODEL` (predeterminado `claude-sonnet-5-5`), que se fija por evaluación (F5-09).
+- **Formato de salida NDJSON** (un bloque por línea): permite validar y mostrar cada bloque en cuanto llega. Lo inválido se descarta y queda registrado por categoría; si no queda nada válido, un reintento y luego error.
+- **Cita por referencia de punta a punta:** el servidor resuelve cada `unitId` contra la release compilada y envía la unidad literal junto al bloque; la app nunca necesita la malla completa. Las citas guardadas de otra release se marcan como tales.
+- **Reglas sobre texto normalizado** (NFKC, sin invisibles, homoglifos plegados, sin tildes) compartidas por validador, huella curricular y privacidad. La evaluación usa además un **juez independiente** con reglas propias para no heredar puntos ciegos.
+- **Segura por defecto:** apagada sin `HAPPY_ENABLED=1` y clave; la interfaz pregunta la disponibilidad en tiempo de ejecución. Sin F4, los límites son de mejor esfuerzo; el control de gasto real es el límite del proveedor.
+- **Memoria por hilo** en el navegador (últimos turnos, Happy resumida) hasta F4; el servidor vuelve a aplicar la política a los turnos de la docente.

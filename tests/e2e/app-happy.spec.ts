@@ -52,6 +52,9 @@ test.describe("F5-07 · Happy en la app", () => {
     await askIdeasForS21(page);
     await expect(page.locator(".path")).toHaveCount(3);
     await expect(page).toHaveURL(/\/happy\?hilo=/);
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("ht.app.v1") ?? ""))
+      .toContain("S2.1#momento_vivir");
     await page.reload();
     await expect(
       page.locator('.block--malla[data-unit-id="S2.1#momento_vivir"] .block__literal'),
@@ -118,7 +121,9 @@ test.describe("F5-07 · Happy en la app", () => {
     await page.goto("/happy");
     await page.getByLabel("Mensaje para Happy").fill("[[vacio]] algo");
     await page.getByLabel("Mensaje para Happy").press("Enter");
-    await expect(page.locator(".error-state")).toContainText("Happy no pudo responder");
+    await expect(page.locator(".error-state")).toContainText(
+      "Happy no logró una respuesta que cumpla sus reglas",
+    );
     await expect(page.getByRole("button", { name: "Reintentar" })).toBeVisible();
   });
 

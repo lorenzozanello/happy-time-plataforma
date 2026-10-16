@@ -5,15 +5,13 @@
  */
 import type { Unit } from "../../src/domain/curriculum/schema";
 import type { Action, Block, HappyResponse, Mode } from "../../src/domain/happy/schema";
-import type { HappyReply, HappyService } from "../../src/ui/app/types";
+import { HappyUserError, type HappyReply, type HappyService } from "../../src/ui/app/types";
 
 type Event =
   | { type: "meta"; mode: Mode }
   | { type: "block"; block: Block; units: Unit[] }
   | { type: "done"; nextActions: Action[] }
   | { type: "error"; message: string };
-
-export class HappyHttpError extends Error {}
 
 const TIMEOUT_MS = 60_000;
 
@@ -38,7 +36,7 @@ export function createHttpHappyService(endpoint = "/api/happy"): HappyService {
         });
         if (!res.ok || !res.body) {
           const msg = (await res.json().catch(() => null)) as { error?: string } | null;
-          throw new HappyHttpError(msg?.error ?? "Happy no pudo responder esta vez.");
+          throw new HappyUserError(msg?.error ?? "Happy no pudo responder esta vez.");
         }
         let mode: Mode = req.mode;
         const blocks: Block[] = [];
@@ -64,12 +62,12 @@ export function createHttpHappyService(endpoint = "/api/happy"): HappyService {
               blocks.push(ev.block);
               for (const u of ev.units) units.set(u.unitId, u);
               onProgress(reply([]));
-            } else if (ev.type === "error") throw new HappyHttpError(ev.message);
+            } else if (ev.type === "error") throw new HappyUserError(ev.message);
             else return reply(ev.nextActions);
           }
           if (done) break;
         }
-        throw new HappyHttpError("La respuesta de Happy se interrumpió.");
+        throw new HappyUserError("La respuesta de Happy se interrumpió.");
       } finally {
         clearTimeout(timer);
       }

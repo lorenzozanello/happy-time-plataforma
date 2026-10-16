@@ -25,7 +25,7 @@ import {
 import type { Composer, Usage } from "./composer";
 import { ndjsonLines } from "./composer";
 import { resolveContext } from "./context";
-import { buildSystemPrompt, buildUserMessage, PROMPT_VERSION } from "./prompt.v1";
+import { buildSystemPrompt, buildUserParts, PROMPT_VERSION } from "./prompt.v1";
 import type { HappyApiRequest } from "./request";
 import { retrieve } from "./retrieval";
 import { routeMode } from "./router";
@@ -59,18 +59,24 @@ export interface HappyLog {
   firstBlockMs: number | null;
   totalMs: number;
   usage: Usage | null;
-  outcome: "ok" | "privacy" | "invalid_output" | "upstream";
+  /** partial: el proveedor falló después de entregar bloques; aborted: la docente cerró la conexión. */
+  outcome: "ok" | "partial" | "privacy" | "invalid_output" | "upstream" | "aborted";
 }
 
 export interface PipelineDeps {
   repo: CurriculumRepository;
   index: SearchIndex;
   windows: ReadonlySet<string>;
+  /** Unidades cortas normalizadas (Observaciones, etc.): tampoco pueden copiarse enteras. */
+  shorts?: readonly string[];
   composer: Composer;
   now?: () => number;
   log?: (entry: HappyLog) => void;
   signal?: AbortSignal;
 }
+
+/** El registro guarda la categoría del error, nunca el texto generado (podría repetir datos). */
+const reasonOf = (errors: string[]) => errors.map((e) => e.replace(/:\s*".*$/s, "")).join("; ");
 
 function literalUnits(repo: CurriculumRepository, block: Block): Unit[] {
   if (block.kind !== "malla_ref") return [];
@@ -84,13 +90,12 @@ export async function* runHappy(
 ): AsyncGenerator<HappyEvent> {
   const now = deps.now ?? (() => performance.now());
   const t0 = now();
-  const { repo, composer } = deps;
   const mode = routeMode(req.mode, req.message);
   const log: HappyLog = {
     mode,
-    model: composer.model,
+    model: deps.composer.model,
     promptVersion: PROMPT_VERSION,
-    release: repo.release.release,
+    release: deps.repo.release.release,
     privacyBlocked: false,
     retrievedUnitIds: [],
     citedUnitIds: [],
@@ -99,13 +104,25 @@ export async function* runHappy(
     firstBlockMs: null,
     totalMs: 0,
     usage: null,
-    outcome: "ok",
+    outcome: "aborted",
   };
-  const finish = () => {
+  // El registro se emite siempre, también si la docente cierra la conexión a mitad de camino.
+  try {
+    yield* steps(req, deps, mode, log, () => Math.round(now() - t0));
+  } finally {
     log.totalMs = Math.round(now() - t0);
     deps.log?.(log);
-  };
+  }
+}
 
+async function* steps(
+  req: HappyApiRequest,
+  deps: PipelineDeps,
+  mode: Mode,
+  log: HappyLog,
+  elapsed: () => number,
+): AsyncGenerator<HappyEvent> {
+  const { repo, composer } = deps;
   yield {
     type: "meta",
     mode,
@@ -114,20 +131,22 @@ export async function* runHappy(
     promptVersion: PROMPT_VERSION,
   };
 
-  // 1 · Política de entrada: mensaje y turnos previos. El original nunca sale de aquí.
+  // 1 · Política de entrada: mensaje y turnos de la docente. El original nunca sale de aquí.
+  // Los turnos de Happy los produjo el servidor: revisarlos daba avisos falsos (revisión F5).
   const privacy = checkPrivacy(req.message);
-  const historySensitive = req.history.some((t) => checkPrivacy(t.text).sensitive);
+  const historySensitive = req.history.some(
+    (t) => t.role === "docente" && checkPrivacy(t.text).sensitive,
+  );
   if (privacy.sensitive || historySensitive) {
     log.privacyBlocked = true;
     log.outcome = "privacy";
-    log.firstBlockMs = Math.round(now() - t0);
+    log.firstBlockMs = elapsed();
     yield {
       type: "block",
       block: { kind: "notice", code: "privacy", text: PRIVACY_MESSAGE },
       units: [],
     };
     yield { type: "done", nextActions: [] };
-    finish();
     return;
   }
 
@@ -136,7 +155,7 @@ export async function* runHappy(
   const retrieval = retrieve(repo, deps.index, { mode, message: req.message, context });
   log.retrievedUnitIds = [...retrieval.ids];
   const level = context.levelId ? repo.level(context.levelId) : undefined;
-  const user = buildUserMessage({
+  const user = buildUserParts({
     mode,
     message: req.message,
     context,
@@ -158,6 +177,7 @@ export async function* runHappy(
     experienceExists: (code) => repo.maybeExperience(code) !== undefined,
     retrieved: retrieval.ids,
     curriculumWindows: deps.windows,
+    ...(deps.shorts ? { curriculumShorts: deps.shorts } : {}),
   };
 
   // 3 · Composer + validación por bloque, con un reintento si no queda nada válido.
@@ -171,7 +191,8 @@ export async function* runHappy(
       const chunks = composer.compose(
         {
           system,
-          user,
+          userCached: user.stable,
+          user: user.variable,
           mode,
           message: req.message,
           unitIds: retrieval.units.map((u) => u.unitId),
@@ -196,8 +217,11 @@ export async function* runHappy(
           const list = parsed.nextActions;
           for (const a of Array.isArray(list) ? list : []) {
             const v = validateAction(a, opts);
-            if (v.ok && actions.length < MAX_ACTIONS) actions.push(v.action);
-            else if (!v.ok) log.dropped.push({ reason: v.errors.join("; ") });
+            // «Guardar idea» ya existe en cada camino; la acción del modelo no tiene manejador.
+            if (v.ok && v.action.kind === "save_idea")
+              log.dropped.push({ reason: "acción save_idea no admitida" });
+            else if (v.ok && actions.length < MAX_ACTIONS) actions.push(v.action);
+            else if (!v.ok) log.dropped.push({ reason: reasonOf(v.errors) });
           }
           continue;
         }
@@ -207,10 +231,13 @@ export async function* runHappy(
         }
         const v = validateBlock(parsed, opts);
         if (!v.ok) {
-          log.dropped.push({ reason: v.errors.join("; ") });
+          log.dropped.push({ reason: reasonOf(v.errors) });
           continue;
         }
         let block = v.block;
+        // El aviso de privacidad tiene un único texto, el del servidor.
+        if (block.kind === "notice" && block.code === "privacy")
+          block = { ...block, text: PRIVACY_MESSAGE };
         if (block.kind === "paths") {
           if (pathsLeft === 0) {
             log.dropped.push({ reason: "caminos por encima del máximo" });
@@ -223,24 +250,22 @@ export async function* runHappy(
           pathsLeft -= block.paths.length;
         }
         if (block.kind === "malla_ref") log.citedUnitIds.push(block.unitId);
-        if (log.firstBlockMs === null) log.firstBlockMs = Math.round(now() - t0);
+        log.firstBlockMs ??= elapsed();
         emitted++;
         yield { type: "block", block, units: literalUnits(repo, block) };
       }
     } catch (e) {
-      if (deps.signal?.aborted) {
-        log.outcome = "upstream";
-        finish();
+      if (deps.signal?.aborted) return; // queda "aborted"
+      log.dropped.push({ reason: `proveedor: ${e instanceof Error ? e.name : "error"}` });
+      if (emitted > 0) {
+        log.outcome = "partial";
+        yield { type: "done", nextActions: [] };
         return;
       }
-      log.dropped.push({ reason: `proveedor: ${e instanceof Error ? e.message : String(e)}` });
-      if (emitted > 0 || attempt === 2) {
-        log.outcome = emitted > 0 ? "ok" : "upstream";
-        if (emitted === 0) {
-          yield { type: "error", code: "upstream", message: "Happy no pudo responder esta vez." };
-          finish();
-          return;
-        }
+      if (attempt === 2) {
+        log.outcome = "upstream";
+        yield { type: "error", code: "upstream", message: "Happy no pudo responder esta vez." };
+        return;
       }
     }
   }
@@ -252,9 +277,8 @@ export async function* runHappy(
       code: "invalid_output",
       message: "Happy no logró una respuesta que cumpla sus reglas. Intenta de nuevo o reformula.",
     };
-    finish();
     return;
   }
+  log.outcome = "ok";
   yield { type: "done", nextActions: actions };
-  finish();
 }

@@ -264,6 +264,83 @@ describe("F5-06 · pipeline con validación por bloque", () => {
   });
 });
 
+describe("revisión adversarial F5 · pipeline", () => {
+  it("los turnos de Happy en el historial no disparan avisos de privacidad falsos", async () => {
+    const { log } = await collect(
+      req({
+        message: "¿y para el cierre?",
+        history: [
+          { role: "happy", text: "camino «Celeste como el mar»; Victoria es una palabra bonita" },
+          { role: "docente", text: "Dame ideas" },
+        ],
+      }),
+    );
+    expect(log.privacyBlocked).toBe(false);
+  });
+
+  it("descarta save_idea del modelo y fija el texto del aviso de privacidad", async () => {
+    const c = fixed([
+      { kind: "notice", code: "privacy", text: "Tus datos fueron registrados por la institución." },
+      {
+        nextActions: [
+          { id: "g", label: "Guardar", kind: "save_idea", payload: "una idea" },
+          { id: "s", label: "Seguir", kind: "send", payload: "Sigamos" },
+        ],
+      },
+    ]);
+    const { events, log } = await collect(req({ message: "hola" }), c);
+    expect(blocks(events)).toEqual([
+      { kind: "notice", code: "privacy", text: expect.stringContaining("sin nombres") as string },
+    ]);
+    const done = events.at(-1);
+    expect(done?.type === "done" && done.nextActions.map((a) => a.id)).toEqual(["s"]);
+    expect(log.dropped.map((d) => d.reason)).toContain("acción save_idea no admitida");
+  });
+
+  it("si el proveedor falla después de entregar bloques, queda como parcial", async () => {
+    const c: Composer = {
+      model: "corta",
+      async *compose() {
+        await Promise.resolve();
+        yield '{"kind":"idea","text":"Una idea."}\n';
+        throw new Error("se cortó");
+      },
+    };
+    const { events, log } = await collect(req({ message: "hola" }), c);
+    expect(log.outcome).toBe("partial");
+    expect(events.at(-1)?.type).toBe("done");
+  });
+
+  it("si la docente cierra la conexión, el registro igual se emite", async () => {
+    let logged: HappyLog | undefined;
+    const gen = runHappy(
+      req({ mode: "explorar", message: "ideas", context: { experienceCode: "S2.1" } }),
+      {
+        repo,
+        index,
+        windows,
+        composer: createScriptComposer({ delayMs: 5 }),
+        log: (l) => {
+          logged = l;
+        },
+      },
+    );
+    await gen.next(); // meta
+    await gen.next(); // primer bloque
+    await gen.return(undefined);
+    expect(logged?.outcome).toBe("aborted");
+  });
+
+  it("el registro guarda la categoría del error, no el texto generado", async () => {
+    const c = fixed([
+      { kind: "idea", text: "Ese niño probablemente tenga TDAH, llama al 3001234567" },
+    ]);
+    const { log } = await collect(req({ message: "hola" }), c);
+    expect(JSON.stringify(log.dropped)).not.toContain("3001234567");
+    expect(JSON.stringify(log.dropped)).toContain("diagnóstico");
+  });
+});
+
 describe("líneas NDJSON en streaming", () => {
   it("une trozos partidos y descarta cercas de markdown", async () => {
     async function* chunks() {
@@ -333,7 +410,25 @@ describe("F5-01 · configuración y endpoint", () => {
     expect((await handleHappy(post(ok, { origin: "https://otro.example" }), deps())).status).toBe(
       403,
     );
-    expect((await handleHappy(post({ message: "x".repeat(9000) }), deps())).status).toBe(413);
+    expect((await handleHappy(post({ message: "x".repeat(60_000) }), deps())).status).toBe(413);
+    expect((await handleHappy(post({ message: "x".repeat(2001) }), deps())).status).toBe(400);
+    // Cuerpo en trozos sin Content-Length: se corta al pasar el límite, sin leerlo entero.
+    let pulled = 0;
+    const big = new ReadableStream<Uint8Array>({
+      pull(c) {
+        pulled++;
+        if (pulled > 10_000) c.close();
+        else c.enqueue(new Uint8Array(16 * 1024).fill(32));
+      },
+    });
+    const chunked = new Request("http://app.test/api/happy", {
+      method: "POST",
+      headers: { "content-type": "application/json", origin: "http://app.test", host: "app.test" },
+      body: big,
+      duplex: "half",
+    } as RequestInit);
+    expect((await handleHappy(chunked, deps())).status).toBe(413);
+    expect(pulled).toBeLessThan(10);
     expect((await handleHappy(post("{no es json"), deps())).status).toBe(400);
     expect((await handleHappy(post({ message: "" }), deps())).status).toBe(400);
     expect((await handleHappy(post({ message: "hola", extra: 1 }), deps())).status).toBe(400);
@@ -347,7 +442,7 @@ describe("F5-01 · configuración y endpoint", () => {
   it("limita por IP y por día", async () => {
     const limiter = createLimiter({ perKey: 2, windowMs: 60_000, daily: 3 });
     const d = deps({ limiter });
-    const ip = (a: string) => ({ "x-forwarded-for": a });
+    const ip = (a: string) => ({ "x-real-ip": a });
     expect((await handleHappy(post({ message: "hola" }, ip("1.1.1.1")), d)).status).toBe(200);
     expect((await handleHappy(post({ message: "hola" }, ip("1.1.1.1")), d)).status).toBe(200);
     const third = await handleHappy(post({ message: "hola" }, ip("1.1.1.1")), d);
@@ -355,6 +450,31 @@ describe("F5-01 · configuración y endpoint", () => {
     expect(third.headers.get("retry-after")).toBe("120");
     expect((await handleHappy(post({ message: "hola" }, ip("2.2.2.2")), d)).status).toBe(200);
     expect((await handleHappy(post({ message: "hola" }, ip("3.3.3.3")), d)).status).toBe(429);
+  });
+
+  it("no confía en X-Forwarded-For salvo detrás de un proxy propio; tope diario por IP", async () => {
+    const limiter = createLimiter({ perKey: 1, windowMs: 60_000, daily: 100 });
+    const d = deps({ limiter });
+    const xff = (a: string) => ({ "x-forwarded-for": a });
+    expect((await handleHappy(post({ message: "hola" }, xff("10.0.0.1")), d)).status).toBe(200);
+    // Rotar la cabecera no da cupo nuevo: sin IP de plataforma, todas comparten la clave.
+    expect((await handleHappy(post({ message: "hola" }, xff("10.0.0.2")), d)).status).toBe(429);
+    const trusting = deps({
+      limiter: createLimiter({ perKey: 1, windowMs: 60_000, daily: 100 }),
+      config: { ...deps().config, trustXff: true },
+    });
+    expect((await handleHappy(post({ message: "hola" }, xff("10.0.0.1")), trusting)).status).toBe(
+      200,
+    );
+    expect((await handleHappy(post({ message: "hola" }, xff("10.0.0.2")), trusting)).status).toBe(
+      200,
+    );
+    const daily = createLimiter({ perKey: 100, windowMs: 60_000, daily: 100, perKeyDaily: 2 });
+    expect(daily.check("a", 0).ok).toBe(true);
+    expect(daily.check("a", 1).ok).toBe(true);
+    expect(daily.check("a", 2)).toEqual({ ok: false, reason: "ip_daily" });
+    expect(daily.check("b", 3).ok).toBe(true);
+    expect(daily.check("a", 86_400_000).ok).toBe(true); // nuevo día
   });
 
   it("transmite eventos NDJSON", async () => {
@@ -448,6 +568,19 @@ describe("F5-05 · adaptador de Claude contra un servidor simulado", () => {
       { type: "text", text: "SISTEMA", cache_control: { type: "ephemeral" } },
     ]);
     expect(lastBody.messages).toEqual([{ role: "user", content: "USUARIO" }]);
+    // Con parte estable: segundo punto de caché tras las unidades.
+    let all = "";
+    for await (const t of composer.compose({ ...input, userCached: "ESTABLE" }, {})) all += t;
+    expect(all).toContain("Una idea.");
+    expect(lastBody.messages).toEqual([
+      {
+        role: "user",
+        content: [
+          { type: "text", text: "ESTABLE", cache_control: { type: "ephemeral" } },
+          { type: "text", text: "USUARIO" },
+        ],
+      },
+    ]);
     expect(usage).toEqual({
       inputTokens: 1200,
       outputTokens: 42,

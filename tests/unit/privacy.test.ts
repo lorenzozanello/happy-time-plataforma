@@ -3,6 +3,15 @@ import { checkPrivacy } from "../../src/domain/happy/privacy";
 
 /** Corpus de la revisión adversarial de F2 (mensajes realistas de docentes en Colombia). */
 const SENSITIVE = [
+  // Revisión adversarial F5: formatos que antes se escapaban.
+  "Llamen a la mamá al +57 (300) 123 4567",
+  "El número de la casa es 300 123 45 67",
+  "Escriban al 300-12-34-567 si no viene",
+  "Su teléfono es ３００１２３４５６７",
+  "El correo es familia_perez＠gmail.com",
+  "registro civil número 1043 567 890",
+  "Su mamá publica todo en @sofi_perez",
+  "Viven en la carrera 45 con calle 23",
   "Mi alumna Sofía tiene TDAH",
   "Mi alumna Sofía Pérez tiene TDAH y su mamá es 3001234567",
   "la niña se llama Valentina y llora mucho",
@@ -31,6 +40,10 @@ const SENSITIVE = [
 ];
 
 const NOT_SENSITIVE = [
+  "Planeación del año escolar 2025-2026",
+  "La salida es el 12-10-2026 a las 8",
+  "Grupos de 4 niños durante 30 minutos",
+  "Contamos del 1 al 10 con semillas",
   "ideas para trabajar rimas en el patio",
   "un niño de Step 2 que se abruma con el ruido",
   "un niño con autismo en Kínder, ¿cómo adapto el ambiente?",

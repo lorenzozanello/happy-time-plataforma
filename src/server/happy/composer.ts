@@ -6,6 +6,9 @@ import type { Mode } from "../../domain/happy/schema";
 
 export interface ComposeInput {
   system: string;
+  /** Parte estable del mensaje (contexto + unidades), cacheable entre turnos del hilo. */
+  userCached?: string;
+  /** Parte variable (conversación + mensaje de la docente). */
   user: string;
   /** Datos estructurados del turno (los usa el composer de guion de pruebas). */
   mode: Mode;

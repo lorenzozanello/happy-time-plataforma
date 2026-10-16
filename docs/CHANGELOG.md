@@ -1,5 +1,20 @@
 # CHANGELOG — Happy Time
 
+## [F5] 2026-10-16 — Happy núcleo (sin proveedor conectado)
+### Agregado
+- Pipeline de Happy en el servidor: política de entrada, contexto, router, recuperación determinista, prompt v1 versionado, composer de Claude (streaming y caché de prompt) y de guion, validación por bloque y streaming NDJSON.
+- `/api/happy`: apagada por defecto, mismo origen, límites de cuerpo, por IP y por día; disponibilidad en tiempo de ejecución.
+- Happy en la app sin la malla en el navegador: el servidor envía cada cita con su literal.
+- Suite de evaluación de 48 escenarios con criterios duros automáticos y juez independiente; `npm run happy:eval` genera un informe con métricas y rúbrica.
+- e2e de Happy contra `next start` con el composer de guion.
+
+### Corregido (revisión adversarial independiente)
+- Reglas de salida ampliadas (autoridad en voz pasiva y con sujetos institucionales, diagnósticos, etiquetas, notas en letras y desempeño cualitativo) y revisión de frases partidas entre campos.
+- Copia literal detectada sin importar tildes, NFD, invisibles, homoglifos o ancho completo; unidades cortas incluidas.
+- Detector de privacidad: teléfonos con separadores e indicativo, dígitos de ancho completo, «número», @usuario y cruces de calles.
+- Sin avisos de privacidad falsos por respuestas previas de Happy; límites que no dependen de `X-Forwarded-For`; tope diario por IP.
+- Datos guardados reconstruidos campo a campo; citas de otra release marcadas; errores del servidor visibles; registro también en abortos y respuestas parciales.
+
 ## [F3] 2026-10-16 — Malla en producción (Next.js)
 ### Agregado
 - App Next.js 16 en `app/` que reutiliza las pantallas de `src/ui` con modelos de vista serializables y navegación inyectada.

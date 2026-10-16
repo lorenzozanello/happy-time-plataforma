@@ -4,7 +4,10 @@
  * referencia unidades por `unitId` y la interfaz pinta el literal.
  */
 import { z } from "zod";
-import { findCopiedSequence } from "../curriculum/fingerprint";
+import { findCopiedSequence, findCopiedShort } from "../curriculum/fingerprint";
+import { normalizeForRules } from "../text/normalize";
+
+export { normalizeForRules };
 import { MODES, type Mode } from "./modes";
 
 export const ModeSchema = z.enum(MODES);
@@ -79,6 +82,8 @@ export interface ValidationOptions {
   retrieved?: ReadonlySet<string>;
   /** Secuencias de 8 palabras de la malla: el texto generado no puede copiarlas. */
   curriculumWindows?: ReadonlySet<string>;
+  /** Unidades cortas normalizadas (4–7 palabras): tampoco pueden aparecer enteras. */
+  curriculumShorts?: readonly string[];
   allowedModes?: readonly Mode[];
 }
 
@@ -95,71 +100,59 @@ export function generatedStrings(r: HappyResponse): string[] {
   return out;
 }
 
-/**
- * Normaliza para comparar reglas: compatibilidad Unicode, sin caracteres invisibles, homoglifos
- * cirílicos/griegos comunes plegados, sin tildes, minúsculas y espacios simples.
+/*
+ * Reglas sobre texto normalizado (sin tildes, minúsculas). Endurecidas tras la revisión adversarial
+ * de F5: voz pasiva, sujetos institucionales, números en letras, desempeño cualitativo.
  */
-export function normalizeForRules(s: string): string {
-  const confusables: Record<string, string> = {
-    а: "a",
-    е: "e",
-    о: "o",
-    р: "p",
-    с: "c",
-    у: "y",
-    х: "x",
-    і: "i",
-    ј: "j",
-    ѕ: "s",
-    А: "a",
-    Е: "e",
-    О: "o",
-    Р: "p",
-    С: "c",
-    Х: "x",
-    І: "i",
-    Т: "t",
-    М: "m",
-    Н: "h",
-    К: "k",
-    В: "b",
-    α: "a",
-    ο: "o",
-    ε: "e",
-    ι: "i",
-    ν: "v",
-    ρ: "p",
-    τ: "t",
-  };
-  return s
-    .normalize("NFKC")
-    .replace(/[\u200B-\u200F\u2060\uFEFF\u00AD]/g, "")
-    .replace(/[\u0370-\u03FF\u0400-\u04FF]/g, (c) => confusables[c] ?? c)
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
+const NORMATIVE =
+  "(dice|dicen|establece|establecen|indica|indican|exige|exigen|ordena|ordenan|obliga|obligan|plantea|plantean|propone|proponen|senala|senalan|determina|determinan|manda|mandan|pide|piden|orienta|orientan|define|definen|prescribe|prescriben|estipula|estipulan|dispone|disponen|requiere|requieren|contempla|contemplan)";
+const MALLA = "(mallas?|curriculo|plan de estudios)";
 const CLAIMS_AUTHORITY = [
-  /\b(segun|de acuerdo con|conforme a|como (dice|indica|establece))\s+(la|las|nuestra|el)\s+(malla|mallas|curriculo)\b/,
-  /\b(la|las|nuestra|nuestras)\s+mallas?\s+(oficial\s+|institucional\s+)?(dice|dicen|establece|establecen|indica|indican|exige|exigen|ordena|ordenan|plantea|plantean|propone|proponen|senala|senalan|determina|determinan|manda|pide)\b/,
-  /\bel curriculo\s+(oficial|institucional)?\s*(dice|establece|indica|exige)\b/,
+  new RegExp(
+    `\\b(segun|de acuerdo (con|a)|conforme a|como (lo )?${NORMATIVE}|tal como (lo )?\\w+)\\s+(lo (establecido|indicado|dispuesto|planteado|definido) (en|por)\\s+)?(la |las |nuestra |nuestras |el |esta |nuestro )?${MALLA}\\b`,
+  ),
+  new RegExp(
+    `\\b${MALLA}( curricular| institucional| oficial| \\d{4}[- ]?\\d{2}| de happy time| vigente)?\\s+(\\w+\\s+)?${NORMATIVE}\\b`,
+  ),
+  new RegExp(
+    `\\b(se ${NORMATIVE}|(esta|estan) (establecid|indicad|definid|estipulad|planteado|dispuest)\\w*|lo (establecido|indicado|dispuesto|planteado|definido))\\s+(en|por)\\s+(la |las |nuestra |el |nuestro )?(${MALLA}|institucion|happy time)\\b`,
+  ),
+  new RegExp(`\\ben (la |nuestra )?${MALLA}\\s+(se\\s+)?${NORMATIVE}\\b`),
+  new RegExp(
+    `\\b(la institucion|happy time|el jardin|el colegio|la coordinacion|la direccion|la rectoria)\\s+(\\w+\\s+)?(exige|exigen|ordena|obliga|establece|dispone|manda|determina|estipula|requiere|prescribe)\\b`,
+  ),
+  /\bobligatorio cumplimiento\b/,
+  /\b(institucional|curricular)mente obligatori/,
   /\bdesde (la|nuestra) malla\b/,
-  /\btexto (literal|oficial) de la malla\b/,
-  /\b(lineamiento|norma|requisito) (institucional|oficial)\b/,
+  /\btexto (literal|oficial|institucional)\b/,
+  /\b(lineamiento|norma|requisito|mandato|directriz|disposicion) (institucional|oficial|curricular)\b/,
 ];
 
+const DX =
+  "(tea|tdah|tda|autismo|autista|autistas|espectro autista|espectro|asperger|dislexia|dislexic[oa]|discalculia|trastorno|sindrome|deficit|retraso|hiperactividad|hiperactiv[oa]|inatencion|discapacidad intelectual|negativista desafiante)";
+const NUM = "(\\d+([.,]\\d+)?|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)";
 const FORBIDDEN_OUTPUT = [
   // diagnósticos o sospechas clínicas sobre una persona
-  /\bdiagnostic[oa]\s*[:=]/,
-  /\b(tiene|presenta|podria tener|puede tener|probablemente (sea|tenga)|parece tener|sospecha de|sospecho|rasgos|signos de)\s+(un |una |el |la )?(tea|tdah|autismo|autista|autistas|dislexia|discalculia|trastorno|sindrome|deficit|retraso)\b/,
-  /\b(es|parece|seria) (autista|hiperactiv[oa]|dislexic[oa])\b/,
+  /\bdiagnostico\s*[:=]/,
+  /\b(su|el|un|este|ese) diagnostico (es|seria|sera|probable|de)\b/,
+  /\bdiagnosticad[oa]s? con\b/,
+  new RegExp(
+    `\\b(es|son|seria|sera|parece|podria ser|probablemente (es|sea)|claramente es)\\s+(claramente\\s+)?(un caso de |un nino con |una nina con |un |una )?${DX}\\b`,
+  ),
+  new RegExp(
+    `\\b(tiene|tienen|presenta|presentan|muestra|muestran|manifiesta|podria tener|puede tener|probablemente (sea|tenga)|parece tener|sospecha de|sospecho|indicios de|rasgos (de|del)|signos de|sintomas de)\\s+(\\w+\\s+){0,2}${DX}\\b`,
+  ),
+  /\b(es|son) (un|una)? ?(nino|nina|ninos|ninas)? ?(problema|problematic[oa]s?|agresiv[oa]s?|malcriad[oa]s?|vag[oa]s?)\b/,
+  /\bnin[oa]s? problema\b/,
   // calificaciones numéricas o escalas de desempeño
-  /\b\d+([.,]\d+)?\s*(\/|sobre|de)\s*(5|10|100)\b/,
-  /\bnota\s*(es|de|final|:|=)\s*\d/,
-  /\bcalificacion\s*[:=]/,
-  /\b(desempeno|nivel de desempeno)\s+(bajo|basico|alto|superior)\b/,
+  new RegExp(
+    `\\b${NUM}\\s*(\\/|sobre|de)\\s*(5|10|100|cinco|diez|cien)\\b(?!\\s*(anos|meses|minutos|ninos|ninas))`,
+  ),
+  new RegExp(
+    `\\b(su|la|una|tu) (nota|calificacion|puntaje|puntuacion)( final)?\\s*(es|sera|seria|:|=|de)\\s*${NUM}\\b`,
+  ),
+  /\b(nota|calificacion|puntaje)\s*[:=]/,
+  /\b(calificacion|valoracion|nivel de logro|desempeno|nivel de desempeno)\s*(es|fue|sera|seria|:|=)?\s*(bajo|basico|alto|superior|insuficiente|deficiente|aceptable|sobresaliente|excelente)\b/,
   /\b(reprueba|reprobo|pierde el (ano|grado))\b/,
 ];
 
@@ -174,7 +167,7 @@ export function blockStrings(b: Block): string[] {
 /** Reglas sobre texto generado: autoridad institucional, diagnóstico/calificación, copia. */
 export function textErrors(
   t: string,
-  opts: Pick<ValidationOptions, "curriculumWindows">,
+  opts: Pick<ValidationOptions, "curriculumWindows" | "curriculumShorts">,
 ): string[] {
   const errors: string[] = [];
   const n = normalizeForRules(t);
@@ -185,6 +178,10 @@ export function textErrors(
   if (opts.curriculumWindows) {
     const copied = findCopiedSequence(t, opts.curriculumWindows);
     if (copied) errors.push(`texto generado copia la malla: "${copied}"`);
+  }
+  if (opts.curriculumShorts) {
+    const short = findCopiedShort(t, opts.curriculumShorts);
+    if (short) errors.push(`texto generado copia la malla: "${short}"`);
   }
   return errors;
 }
@@ -212,7 +209,11 @@ export function validateBlock(
     if (b.segment && opts.segmentExists && !opts.segmentExists(b.unitId, b.segment))
       errors.push(`segmento inexistente: ${b.unitId}/${b.segment}`);
   }
-  for (const t of blockStrings(b)) errors.push(...textErrors(t, opts));
+  const strings = blockStrings(b);
+  for (const t of strings) errors.push(...textErrors(t, opts));
+  // Una frase partida entre campos (p. ej. dos pasos) se revisa también unida.
+  if (strings.length > 1 && errors.length === 0)
+    errors.push(...textErrors(strings.join(" "), opts));
   return errors.length ? { ok: false, errors } : { ok: true, block: b };
 }
 
@@ -235,7 +236,7 @@ export function validateAction(
     !opts.experienceExists(a.payload ?? "")
   )
     errors.push(`acción hacia una experiencia inexistente: ${a.payload ?? ""}`);
-  if (a.payload && a.kind === "send") errors.push(...textErrors(a.payload, opts));
+  if (a.payload) errors.push(...textErrors(a.payload, opts));
   return errors.length ? { ok: false, errors } : { ok: true, action: a };
 }
 

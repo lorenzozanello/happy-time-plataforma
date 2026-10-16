@@ -12,13 +12,15 @@ import type { Limiter } from "./limits";
 import { runHappy, type HappyLog } from "./pipeline";
 import { HappyApiRequestSchema } from "./request";
 
-export const MAX_BODY_BYTES = 8 * 1024;
+/** Mensaje (2 000 caracteres) + 6 turnos de historial, con margen para UTF-8 de varios bytes. */
+export const MAX_BODY_BYTES = 48 * 1024;
 
 export interface HandlerDeps {
   config: HappyConfig;
   repo: CurriculumRepository;
   index: SearchIndex;
   windows: ReadonlySet<string>;
+  shorts?: readonly string[];
   limiter: Limiter;
   /** Inyectable en pruebas; si no, se crea según la configuración. */
   composer?: Composer;
@@ -41,9 +43,44 @@ export function handleStatus(config: HappyConfig): Response {
   return json(200, { disponible: config.enabled });
 }
 
-function clientKey(req: Request): string {
-  const fwd = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return fwd || req.headers.get("x-real-ip") || "local";
+/**
+ * IP del cliente para los límites. Solo se confía en cabeceras que pone la plataforma
+ * (Vercel: `x-real-ip` / `x-vercel-forwarded-for`, que el cliente no puede fijar). Fuera de
+ * Vercel, `X-Forwarded-For` lo controla el cliente: solo se usa si `HAPPY_TRUST_XFF=1`
+ * (detrás de un proxy propio que la reescribe). Sin IP fiable, todas comparten la clave.
+ */
+function clientKey(req: Request, trustXff: boolean): string {
+  const platform =
+    req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-real-ip")?.trim();
+  if (platform) return platform;
+  if (trustXff) return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "anonimo";
+  return "anonimo";
+}
+
+/** Lee el cuerpo en streaming y corta al pasar el límite (sin cargar cuerpos enormes). */
+async function readLimited(req: Request, max: number): Promise<string | null> {
+  if (!req.body) return "";
+  const reader = req.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const all = new Uint8Array(size);
+  let at = 0;
+  for (const c of chunks) {
+    all.set(c, at);
+    at += c.byteLength;
+  }
+  return new TextDecoder().decode(all);
 }
 
 /** Solo el propio sitio puede llamar a Happy (sin CORS, sin formularios de terceros). */
@@ -73,9 +110,8 @@ export async function handleHappy(req: Request, deps: HandlerDeps): Promise<Resp
     return json(415, { error: "Formato no admitido." });
   const declared = Number(req.headers.get("content-length") ?? "0");
   if (declared > MAX_BODY_BYTES) return json(413, { error: "El mensaje es demasiado largo." });
-  const raw = await req.text();
-  if (new TextEncoder().encode(raw).length > MAX_BODY_BYTES)
-    return json(413, { error: "El mensaje es demasiado largo." });
+  const raw = await readLimited(req, MAX_BODY_BYTES);
+  if (raw === null) return json(413, { error: "El mensaje es demasiado largo." });
 
   let body: unknown;
   try {
@@ -86,17 +122,17 @@ export async function handleHappy(req: Request, deps: HandlerDeps): Promise<Resp
   const parsed = HappyApiRequestSchema.safeParse(body);
   if (!parsed.success) return json(400, { error: "Solicitud inválida." });
 
-  const limit = deps.limiter.check(clientKey(req), (deps.nowMs ?? Date.now)());
+  const limit = deps.limiter.check(clientKey(req, config.trustXff), (deps.nowMs ?? Date.now)());
   if (!limit.ok)
     return json(
       429,
       {
         error:
-          limit.reason === "daily"
-            ? "Happy alcanzó el límite de hoy. Vuelve mañana."
-            : "Muchas solicitudes seguidas. Espera unos minutos.",
+          limit.reason === "ip"
+            ? "Muchas solicitudes seguidas. Espera unos minutos."
+            : "Happy alcanzó el límite de hoy. Vuelve mañana.",
       },
-      { "Retry-After": limit.reason === "daily" ? "3600" : "120" },
+      { "Retry-After": limit.reason === "ip" ? "120" : "3600" },
     );
 
   const composer = deps.composer ?? composerFor(config);
@@ -105,6 +141,7 @@ export async function handleHappy(req: Request, deps: HandlerDeps): Promise<Resp
     repo: deps.repo,
     index: deps.index,
     windows: deps.windows,
+    ...(deps.shorts ? { shorts: deps.shorts } : {}),
     composer,
     signal: req.signal,
     ...(deps.log ? { log: deps.log } : {}),

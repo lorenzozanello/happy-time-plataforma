@@ -10,7 +10,7 @@ import {
   type CurriculumRepository,
 } from "../../src/domain/curriculum/repository";
 import { CurriculumReleaseSchema } from "../../src/domain/curriculum/schema";
-import { curriculumWindows } from "../../src/domain/curriculum/fingerprint";
+import { curriculumShortTexts, curriculumWindows } from "../../src/domain/curriculum/fingerprint";
 import { buildSearchIndex, type SearchIndex } from "../../src/domain/curriculum/search";
 import {
   buildCatalog,
@@ -54,4 +54,12 @@ export function getSearchIndex(): SearchIndex {
 export function getCurriculumWindows(): Set<string> {
   windows ??= curriculumWindows(getRepository().release.units);
   return windows;
+}
+
+let shorts: string[] | undefined;
+
+/** Unidades cortas normalizadas (Observaciones, etc.): tampoco pueden copiarse enteras. */
+export function getCurriculumShorts(): string[] {
+  shorts ??= curriculumShortTexts(getRepository().release.units);
+  return shorts;
 }

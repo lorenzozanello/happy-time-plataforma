@@ -5,7 +5,12 @@
 import { readHappyConfig } from "../../../src/server/happy/config";
 import { handleHappy, handleStatus } from "../../../src/server/happy/handler";
 import { createLimiter, type Limiter } from "../../../src/server/happy/limits";
-import { getCurriculumWindows, getRepository, getSearchIndex } from "../../_server/curriculum";
+import {
+  getCurriculumShorts,
+  getCurriculumWindows,
+  getRepository,
+  getSearchIndex,
+} from "../../_server/curriculum";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -22,12 +27,14 @@ export async function POST(req: Request) {
     perKey: config.perIpLimit,
     windowMs: config.perIpWindowMs,
     daily: config.dailyLimit,
+    perKeyDaily: config.perIpDailyLimit,
   });
   return handleHappy(req, {
     config,
     repo: getRepository(),
     index: getSearchIndex(),
     windows: getCurriculumWindows(),
+    shorts: getCurriculumShorts(),
     limiter,
     log: (entry) => {
       // Registro operativo sin el texto de la docente (§8.5 minimización).

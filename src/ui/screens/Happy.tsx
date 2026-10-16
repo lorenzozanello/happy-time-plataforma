@@ -5,7 +5,13 @@ import type { Unit } from "../../domain/curriculum/schema";
 import { catalogExperience, catalogLevel } from "../../domain/curriculum/views";
 import type { Block, HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
 import { newId, now, useApp } from "../app/state";
-import type { HappyReply, HappyTurn, Thread, ThreadMessage } from "../app/types";
+import {
+  HappyUserError,
+  type HappyReply,
+  type HappyTurn,
+  type Thread,
+  type ThreadMessage,
+} from "../app/types";
 import { Button, ErrorState, Icon, IconButton, Literal, Provenance, Skeleton } from "../components";
 import { HappyAvatar, HappyLockup, type HappyState } from "../happy/HappyAvatar";
 import { ROMAN } from "../presentation";
@@ -203,7 +209,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
       persist(current);
       setPartial(null);
       setPhase("done");
-    } catch {
+    } catch (e) {
       current = {
         ...current,
         messages: [
@@ -213,7 +219,9 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
             role: "happy",
             replyTo: userMsg.id,
             error:
-              "Happy no pudo responder esta vez. Tu mensaje quedó guardado; vuelve a intentarlo.",
+              e instanceof HappyUserError
+                ? `${e.message} Tu mensaje quedó guardado.`
+                : "Happy no pudo responder esta vez. Tu mensaje quedó guardado; vuelve a intentarlo.",
             createdAt: now(),
           },
         ],
@@ -412,6 +420,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
         </label>
         <textarea
           id="happy-input"
+          maxLength={2000}
           rows={2}
           value={draft}
           disabled={!online}
@@ -612,12 +621,19 @@ function BlockView({
       // Literal resuelto por el servidor (o por el repositorio en el prototipo); nunca del modelo.
       const u = units.find((x) => x.unitId === block.unitId) ?? repo?.maybeUnit(block.unitId);
       if (!u) return null; // el validador ya lo impide; defensa adicional
+      // Una cita guardada de otra release de la malla no se presenta como la malla vigente.
+      const stale = u.release !== catalog.release;
       const seg = block.segment ? u.segments?.find((s) => s.key === block.segment) : undefined;
       const text = seg ? u.text.slice(seg.valueStart, seg.valueEnd) : u.text;
       const segLabel = seg?.label;
       return (
-        <section className="block block--malla" data-unit-id={u.unitId}>
-          <p className="block__label">Desde nuestra malla…</p>
+        <section
+          className={`block block--malla${stale ? " block--stale" : ""}`}
+          data-unit-id={u.unitId}
+        >
+          <p className="block__label">
+            {stale ? `De una versión anterior de la malla (${u.release})` : "Desde nuestra malla…"}
+          </p>
           <p className="block__where">
             {u.code && <span className="code">{u.code}</span>}{" "}
             {u.code ? (catalogExperience(catalog, u.code)?.title.text ?? "") : ""} ·{" "}

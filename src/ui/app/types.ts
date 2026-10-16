@@ -36,6 +36,11 @@ export interface HappyReply {
   units: Unit[];
 }
 
+/** Error con un mensaje apto para mostrar a la docente (límites, reglas, disponibilidad). */
+export class HappyUserError extends Error {
+  override readonly name = "HappyUserError";
+}
+
 /** Contrato de Happy (/api/happy en la app; simulador en el prototipo). Entrega bloques a medida que llegan. */
 export interface HappyService {
   respond(req: HappyRequest, onProgress: (partial: HappyReply) => void): Promise<HappyReply>;

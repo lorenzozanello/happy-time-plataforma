@@ -20,7 +20,8 @@ export function createAnthropicComposer(opts: AnthropicComposerOptions): Compose
     apiKey: opts.apiKey,
     ...(opts.baseURL ? { baseURL: opts.baseURL } : {}),
     timeout: opts.timeoutMs ?? 45_000,
-    maxRetries: 1,
+    // El pipeline ya reintenta una vez: como máximo 2 llamadas por solicitud.
+    maxRetries: 0,
   });
   return {
     model: opts.model,
@@ -30,7 +31,19 @@ export function createAnthropicComposer(opts: AnthropicComposerOptions): Compose
           model: opts.model,
           max_tokens: opts.maxTokens ?? 1800,
           system: [{ type: "text", text: input.system, cache_control: { type: "ephemeral" } }],
-          messages: [{ role: "user", content: input.user }],
+          messages: [
+            {
+              role: "user",
+              // Segundo punto de caché tras las unidades: los turnos sobre la misma experiencia
+              // las reutilizan. Si el bloque no alcanza el mínimo cacheable, la API lo ignora.
+              content: input.userCached
+                ? [
+                    { type: "text", text: input.userCached, cache_control: { type: "ephemeral" } },
+                    { type: "text", text: input.user },
+                  ]
+                : input.user,
+            },
+          ],
         },
         signal ? { signal } : {},
       );

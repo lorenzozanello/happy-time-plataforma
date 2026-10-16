@@ -60,8 +60,8 @@ Bloques posibles (máximo 8):
 {"kind":"question","text":"<una pregunta breve>"}
 {"kind":"notice","code":"privacy"|"out_of_scope"|"no_match","text":"<aviso breve y amable>"}
 Última línea, siempre:
-{"nextActions":[{"id":"<id corto>","label":"<texto del botón>","kind":"send"|"open_experience"|"save_idea","payload":"<mensaje a enviar o código de experiencia>"}]}
-(hasta 3 acciones; puede ser una lista vacía). Una acción "open_experience" lleva en payload un código de experiencia de <unidades>, por ejemplo el de la experiencia activa.
+{"nextActions":[{"id":"<id corto>","label":"<texto del botón>","kind":"send"|"open_experience","payload":"<mensaje a enviar o código de experiencia>"}]}
+(hasta 3 acciones; puede ser una lista vacía; "Guardar idea" ya existe en cada camino, no lo propongas). Una acción "open_experience" lleva en payload un código de experiencia de <unidades>, por ejemplo el de la experiencia activa.
 
 ## Cómo trabajar en cada modo
 - explorar: ${MODE_GUIDE.explorar}
@@ -93,7 +93,7 @@ export interface UserTurnInput {
 const fence = (t: string) => t.replace(/</g, "‹").replace(/>/g, "›");
 
 /** Mensaje de usuario: contexto activo, unidades recuperadas, conversación y mensaje. */
-export function buildUserMessage(input: UserTurnInput): string {
+export function buildUserParts(input: UserTurnInput): { stable: string; variable: string } {
   const ctx = [
     input.contextLabels.level && `nivel: ${input.contextLabels.level}`,
     input.contextLabels.period && `periodo: ${input.contextLabels.period}`,
@@ -104,13 +104,23 @@ export function buildUserMessage(input: UserTurnInput): string {
   const history = input.history
     .map((t) => `${t.role === "docente" ? "Docente" : "Happy"}: ${fence(t.text)}`)
     .join("\n");
-  return [
-    `<modo>${input.mode}</modo>`,
+  // Primero lo estable (contexto + unidades: se repite en los turnos sobre la misma experiencia y
+  // se puede cachear); después lo que cambia en cada turno.
+  const stable = [
     `<contexto>\n${ctx || "sin contexto: la docente no eligió nivel ni experiencia"}\n</contexto>`,
     `<unidades>\n${input.units.map(describeUnit).join("\n") || "(ninguna unidad recuperada)"}\n</unidades>`,
+  ].join("\n\n");
+  const variable = [
+    `<modo>${input.mode}</modo>`,
     history ? `<conversacion>\n${history}\n</conversacion>` : "",
     `<mensaje_docente>\n${fence(input.message)}\n</mensaje_docente>`,
   ]
     .filter(Boolean)
     .join("\n\n");
+  return { stable, variable };
+}
+
+export function buildUserMessage(input: UserTurnInput): string {
+  const { stable, variable } = buildUserParts(input);
+  return `${stable}\n\n${variable}`;
 }

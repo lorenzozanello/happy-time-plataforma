@@ -74,11 +74,16 @@ export const ExperienceSchema = z.strictObject({
   fieldUnitIds: z.record(experienceFieldKey, z.string()),
 });
 
+/**
+ * Propósito esencial compartido (derivado, H-15). No es una unidad nueva: su texto es la porción
+ * `segmentKey` de cada unidad listada en `unitIds`, idéntica en todas. Para citar, se usa la unidad.
+ */
 export const PurposeSchema = z.strictObject({
   n: z.int().min(1).max(3),
   text: z.string(),
   derived: z.literal(true),
-  occurrences: z.array(z.string()),
+  segmentKey: z.string(),
+  unitIds: z.array(z.string()),
 });
 
 export const CurriculumReleaseSchema = z.strictObject({

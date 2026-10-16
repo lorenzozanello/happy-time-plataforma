@@ -1,3 +1,6 @@
-# El Excel certificado es binario y nunca debe normalizarse
+# Finales de línea consistentes en todas las plataformas (el check curricular compara bytes).
+* text=auto eol=lf
+# El Excel certificado es binario y nunca debe normalizarse.
 *.xlsx binary
+# Artefactos generados: se revisan con `npm run curriculum:diff`, no con git diff.
 curriculum/build/*.json -diff linguist-generated=true

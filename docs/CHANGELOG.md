@@ -7,7 +7,14 @@
 - Gate estructural de 22 comprobaciones, lector XLSX propio, compilador determinista y esquema canónico con Zod.
 - `curriculum/build/curriculum.2026-06.json`: 572 unidades trazables; índice de búsqueda; reporte de compilación.
 - Validador independiente en Python/openpyxl (doble lectura) y reporte de diferencias entre releases.
-- 42 pruebas automatizadas: fidelidad, mutaciones, determinismo, anti-hardcode, búsqueda, segmentación.
+- 69 pruebas automatizadas: fidelidad, atribución, mutaciones, determinismo, anti-hardcode, búsqueda, segmentación, lector XLSX sintético.
+- `.github/CODEOWNERS` y finales de línea LF.
+
+### Corregido (revisión adversarial independiente)
+- El validador Python ahora verifica la atribución de cada celda, no solo el texto.
+- El lector XLSX decodifica referencias numéricas de caracteres.
+- El diff de releases detecta cambios de celda, nivel, código, segmentos y estructuras.
+- Se elimina `gate0.py` del repo (era el script del paquete y no aplicaba al lock).
 - `CLAUDE.md` con las reglas de trabajo para sesiones futuras.
 
 ### Sin cambios

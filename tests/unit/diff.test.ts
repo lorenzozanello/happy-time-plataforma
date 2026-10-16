@@ -36,4 +36,22 @@ describe("F1-11 · diferencias entre releases", () => {
     expect(md).toContain("`S3.2#saberes`");
     expect(md).toContain("(texto de prueba)");
   });
+
+  it("detecta cambios de atribución aunque el texto sea idéntico", () => {
+    const next: CurriculumRelease = structuredClone(release());
+    // "2 años" aparece en dos celdas distintas: un cambio de celda no altera el texto.
+    const u = next.units.find((x) => x.unitId === "L:step-1#edad_salida");
+    if (!u) throw new Error("unidad faltante");
+    u.source = { ...u.source, cell: "D6" };
+    u.levelId = "step-2";
+    const level = next.levels[0];
+    if (!level) throw new Error("nivel faltante");
+    level.labelLiteral = "Otro";
+
+    const d = diffReleases(release(), next);
+    expect(d.changed).toHaveLength(1);
+    expect(d.changed[0]?.fields).toEqual(["source", "levelId"]);
+    expect(d.structuresChanged).toEqual(["levels"]);
+    expect(diffToMarkdown(d)).toContain("Celda: Malla ajustada!E2 → Malla ajustada!D6");
+  });
 });

@@ -254,11 +254,9 @@ export function compileCurriculum(
       .filter((u) => u.fieldKey === "propositos")
       .map((u) => {
         const seg = u.segments?.find((s) => s.key === `proposito_${n}`);
-        return seg
-          ? { text: u.text.slice(seg.valueStart, seg.valueEnd), cell: u.source.cell }
-          : null;
+        return seg ? { text: u.text.slice(seg.valueStart, seg.valueEnd), unitId: u.unitId } : null;
       });
-    const present = found.filter((f): f is { text: string; cell: string } => f !== null);
+    const present = found.filter((f): f is { text: string; unitId: string } => f !== null);
     const texts = new Set(present.map((f) => f.text));
     const first = present[0];
     if (present.length === found.length && texts.size === 1 && first) {
@@ -266,7 +264,8 @@ export function compileCurriculum(
         n,
         text: first.text,
         derived: true,
-        occurrences: present.map((f) => f.cell),
+        segmentKey: `proposito_${n}`,
+        unitIds: present.map((f) => f.unitId),
       });
     } else {
       warnings.push(

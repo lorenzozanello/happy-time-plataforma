@@ -41,11 +41,25 @@ const parser = new XMLParser({
   trimValues: false,
   parseTagValue: false,
   parseAttributeValue: false,
-  processEntities: true,
+  // Las entidades se decodifican a mano en una sola pasada (decodeXmlEntities): así las
+  // referencias numéricas (&#10;, &#xD;) se resuelven y "&amp;#10;" queda como "&#10;" literal.
+  processEntities: false,
   htmlEntities: false,
   ignoreDeclaration: true,
   isArray: (name) => ARRAY_TAGS.has(name),
 });
+
+const XML_ENTITY = /&(#x[0-9a-fA-F]+|#[0-9]+|amp|lt|gt|quot|apos);/g;
+const NAMED: Record<string, string> = { amp: "&", lt: "<", gt: ">", quot: '"', apos: "'" };
+
+/** Decodifica entidades XML predefinidas y referencias numéricas en una sola pasada. */
+export function decodeXmlEntities(s: string): string {
+  return s.replace(XML_ENTITY, (_m, body: string) => {
+    if (body.startsWith("#x")) return String.fromCodePoint(parseInt(body.slice(2), 16));
+    if (body.startsWith("#")) return String.fromCodePoint(parseInt(body.slice(1), 10));
+    return NAMED[body] ?? _m;
+  });
+}
 
 /** Decodifica escapes OOXML `_xHHHH_` (ECMA-376 §22.4.2.4). `_x005F_` escapa el guion bajo. */
 export function decodeOoxmlEscapes(s: string): string {
@@ -70,18 +84,18 @@ function asArray(v: unknown): unknown[] {
 
 function attr(node: XmlNode, name: string): string | undefined {
   const v = node[`@_${name}`];
-  return typeof v === "string" ? v : undefined;
+  return typeof v === "string" ? decodeXmlEntities(v) : undefined;
 }
 
 /** Texto de un elemento <t>: puede llegar como string o como objeto con #text y atributos. */
 function textOf(t: unknown): string {
   if (t === undefined) return "";
-  if (typeof t === "string") return t;
+  if (typeof t === "string") return decodeXmlEntities(t);
   if (typeof t === "number") return String(t);
   const node = asNode(t, "<t>");
   const inner = node["#text"];
   if (inner === undefined) return "";
-  if (typeof inner === "string") return inner;
+  if (typeof inner === "string") return decodeXmlEntities(inner);
   if (typeof inner === "number") return String(inner);
   throw new Error("XLSX: contenido inesperado dentro de <t>");
 }

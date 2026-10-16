@@ -1,14 +1,40 @@
 /** Reporte de diferencias por unidad entre dos releases compiladas (ADR-003, criterio F1-11). */
 import type { CurriculumRelease, Unit } from "../../src/domain/curriculum/schema";
 
+/** Propiedades de una unidad cuyo cambio debe revisar el owner. */
+const COMPARED = [
+  "text",
+  "headerLiteral",
+  "source",
+  "kind",
+  "fieldKey",
+  "levelId",
+  "code",
+  "segments",
+] as const;
+type Compared = (typeof COMPARED)[number];
+
+/** Estructuras de la release (fuera de las unidades) que también se comparan. */
+const STRUCTURES = [
+  "levels",
+  "experiences",
+  "observationUnitIds",
+  "dimensions",
+  "progression",
+  "purposes",
+] as const;
+
 export interface ReleaseDiff {
   from: string;
   to: string;
   added: Unit[];
   removed: Unit[];
-  changed: { before: Unit; after: Unit }[];
+  changed: { before: Unit; after: Unit; fields: Compared[] }[];
   unchanged: number;
+  structuresChanged: string[];
 }
+
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
 export function diffReleases(a: CurriculumRelease, b: CurriculumRelease): ReleaseDiff {
   const before = new Map(a.units.map((u) => [u.unitId, u]));
@@ -20,11 +46,12 @@ export function diffReleases(a: CurriculumRelease, b: CurriculumRelease): Releas
   for (const u of b.units) {
     const prev = before.get(u.unitId);
     if (!prev) continue;
-    if (prev.text !== u.text || prev.headerLiteral !== u.headerLiteral)
-      changed.push({ before: prev, after: u });
+    const fields = COMPARED.filter((k) => !same(prev[k], u[k]));
+    if (fields.length > 0) changed.push({ before: prev, after: u, fields });
     else unchanged++;
   }
-  return { from: a.release, to: b.release, added, removed, changed, unchanged };
+  const structuresChanged = STRUCTURES.filter((k) => !same(a[k], b[k]));
+  return { from: a.release, to: b.release, added, removed, changed, unchanged, structuresChanged };
 }
 
 const quote = (s: string) =>
@@ -32,6 +59,8 @@ const quote = (s: string) =>
     .split("\n")
     .map((l) => `> ${l}`)
     .join("\n");
+
+const where = (u: Unit) => `${u.source.sheet}!${u.source.cell}`;
 
 export function diffToMarkdown(d: ReleaseDiff): string {
   const out: string[] = [
@@ -42,28 +71,22 @@ export function diffToMarkdown(d: ReleaseDiff): string {
     `| ${d.added.length} | ${d.removed.length} | ${d.changed.length} | ${d.unchanged} |`,
     "",
   ];
-  for (const { before, after } of d.changed) {
-    out.push(
-      `## Modificada · \`${after.unitId}\` (${after.source.sheet}!${after.source.cell})`,
-      "",
-    );
-    out.push("**Antes**", "", quote(before.text), "", "**Después**", "", quote(after.text), "");
+  if (d.structuresChanged.length > 0) {
+    out.push(`**Estructuras con cambios:** ${d.structuresChanged.join(", ")}`, "");
+  }
+  for (const { before, after, fields } of d.changed) {
+    out.push(`## Modificada · \`${after.unitId}\` (${where(after)})`, "");
+    out.push(`Cambió: ${fields.join(", ")}`, "");
+    if (fields.includes("source")) out.push(`Celda: ${where(before)} → ${where(after)}`, "");
+    if (fields.includes("text")) {
+      out.push("**Antes**", "", quote(before.text), "", "**Después**", "", quote(after.text), "");
+    }
   }
   for (const u of d.added) {
-    out.push(
-      `## Agregada · \`${u.unitId}\` (${u.source.sheet}!${u.source.cell})`,
-      "",
-      quote(u.text),
-      "",
-    );
+    out.push(`## Agregada · \`${u.unitId}\` (${where(u)})`, "", quote(u.text), "");
   }
   for (const u of d.removed) {
-    out.push(
-      `## Eliminada · \`${u.unitId}\` (${u.source.sheet}!${u.source.cell})`,
-      "",
-      quote(u.text),
-      "",
-    );
+    out.push(`## Eliminada · \`${u.unitId}\` (${where(u)})`, "", quote(u.text), "");
   }
   return `${out.join("\n").trimEnd()}\n`;
 }

@@ -125,7 +125,15 @@ describe("F1-07 · segmentación derivada", () => {
   it("los 3 propósitos esenciales se derivan como compartidos (idénticos en las 20 filas)", () => {
     const p = release().purposes;
     expect(p.map((x) => x.n)).toEqual([1, 2, 3]);
-    for (const x of p) expect(x.occurrences).toHaveLength(20);
+    const units = new Map(release().units.map((u) => [u.unitId, u]));
+    for (const x of p) {
+      expect(x.unitIds).toHaveLength(20);
+      for (const id of x.unitIds) {
+        const u = units.get(id);
+        const seg = u?.segments?.find((s) => s.key === x.segmentKey);
+        expect(seg && u?.text.slice(seg.valueStart, seg.valueEnd)).toBe(x.text);
+      }
+    }
   });
 
   it("compila sin avisos", () => {

@@ -60,6 +60,10 @@ async function expectTouchTargets(page: Page) {
 }
 
 async function expectAccessible(page: Page) {
+  // axe evalúa el diseño en la posición actual; desde arriba nada queda bajo el encabezado fijo.
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+  });
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
     .analyze();

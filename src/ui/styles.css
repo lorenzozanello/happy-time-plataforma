@@ -25,6 +25,12 @@ body {
   height: 100%;
 }
 
+/* El foco y los saltos nunca quedan bajo el encabezado fijo (WCAG 2.4.11). */
+html {
+  scroll-padding-top: calc(76px + env(safe-area-inset-top, 0px));
+  scroll-padding-bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom, 0px));
+}
+
 body {
   margin: 0;
   background: var(--bg);

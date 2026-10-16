@@ -1,10 +1,11 @@
 "use client";
 /**
- * Servicios de la app en F3. Sin acceso ni Happy todavía (F4 y F5): sus contratos existen,
- * pero aquí responden con un error explícito y la interfaz no los ofrece.
+ * Servicios de la app. Happy por HTTP (F5; disponible solo si el servidor la tiene encendida).
+ * El acceso llega en F4: su contrato existe, pero aquí responde con un error explícito.
  */
 import { browserStorage } from "../../src/ui/app/storage";
 import type { Services } from "../../src/ui/app/types";
+import { createHttpHappyService } from "./happy-http";
 
 const notYet = (what: string) => Promise.reject(new Error(`${what} llega en una próxima versión`));
 
@@ -14,9 +15,7 @@ export function createAppServices(): Services {
       requestCode: () => notYet("El acceso"),
       verifyCode: () => notYet("El acceso"),
     },
-    happy: {
-      respond: () => notYet("Happy"),
-    },
+    happy: createHttpHappyService(),
     storage: browserStorage(),
   };
 }

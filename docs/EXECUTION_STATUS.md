@@ -1,7 +1,7 @@
 # EXECUTION_STATUS — Happy Time
 
 **Última actualización:** 2026-10-16
-**Fase actual:** F3 — Malla en producción (lista en el PR #3; falta solo el despliegue, OD-1) · F2 pendiente solo de revisión humana
+**Fase actual:** F5 — Happy núcleo (en curso, sin proveedor de IA conectado) · F3 fusionada (falta despliegue, OD-1) · F2 pendiente de revisión humana
 **Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe`
 
 | Fase | Estado | Evidencia / bloqueo |
@@ -9,9 +9,9 @@
 | F0 Baseline | ✅ Aprobado por el owner (2026-10-16, “Procede”) | `docs/ARCHITECTURE_BASELINE_v1.md` |
 | F1 Compilador curricular | ✅ Fusionado (PR #1) · ⏳ OD-5 para cierre formal | PR #1, CI verde |
 | F2 Diseño y prototipo | ✅ Fusionado (PR #2) · ⏳ revisión humana (F2-09) | Reloj provisional hasta OD-6 |
-| F3 Malla en producción | ✅ F3-01…F3-08 en el PR #3 · ⏳ F3-09 despliegue (OD-1) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
+| F3 Malla en producción | ✅ Fusionado (PR #3) · ⏳ F3-09 despliegue (OD-1) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
 | F4 Acceso y Guardados | ⏸ | OD-1, OD-3 |
-| F5 Happy núcleo | ⏸ | OD-2 |
+| F5 Happy núcleo | 🔄 En curso (núcleo verificable sin IA) | Calidad real requiere OD-2 (clave y presupuesto) |
 | F6 Happy extendida | ⏸ | OD-4 |
 | F7 Endurecimiento y piloto | ⏸ | OD-8 |
 
@@ -125,6 +125,29 @@ Revisión adversarial independiente de F3 (corregida en el mismo PR): **medio-al
 
 Limitaciones conocidas: `/malla` depende del JavaScript para mostrar la experiencia (2,9 s en el perfil lento; mejora posible pre-generando por nivel en F7). `next start` no comprime el JSON de búsqueda (407 KB; ~68 KB con gzip): Vercel lo comprime en el borde; en autoalojamiento debe hacerlo el proxy. En `next start`, cada 404 de ruta dinámica deja un `NoFallbackError` en el registro del servidor (comportamiento de Next, sin efecto para la docente).
 
+## F5 — Criterios de prueba (definidos antes de implementar)
+
+**Objetivo:** el núcleo de Happy en el servidor —políticas, enrutador, recuperación, composer, validación y streaming— listo para conectarse al proveedor de IA, y verificado de punta a punta sin él.
+
+**Supuestos (trabajo autónomo, según las recomendaciones del Baseline):**
+- **OD-2 sin respuesta** → se implementa la recomendación (Claude API) detrás de una interfaz `Composer`. Modelo por variable de entorno (`HAPPY_MODEL`, predeterminado `claude-sonnet-5-5`); sin clave no hay llamadas ni costo. La calidad real (rúbrica, latencia, costo) se mide cuando el owner cargue la clave.
+- **F4 aún no existe** (sin autenticación): `/api/happy` queda **apagada por defecto** en producción (`HAPPY_ENABLED`). Encenderla sin F4 solo es aceptable en una vista previa privada, con límites por IP y tope diario.
+- Sin base de datos todavía: el hilo vive en el navegador y el cliente envía los últimos turnos ya redactados; la persistencia en servidor (con `model`, `prompt_version`, unidades y latencias) llega con F4.
+- El handoff original (§5–6, tono e identidad) no está en esta sesión: el prompt v1 se redacta desde el Baseline (§3–4, §8) y queda marcado para revisión del owner.
+- El texto literal de las citas lo resuelve el **servidor** desde el JSON compilado (nunca el modelo) y viaja junto al bloque: la app no necesita la malla completa en el navegador.
+
+| ID | Criterio | Cómo se verifica |
+|---|---|---|
+| F5-01 | `/api/happy` segura por defecto | Apagada sin `HAPPY_ENABLED`; mismo origen; cuerpo ≤ 8 KB validado con Zod; límite por IP y tope diario; errores en español; sin secretos en el cliente (chequeo de bundle) |
+| F5-02 | Política de entrada en el servidor | Datos identificables → aviso de privacidad **sin llamar al modelo** y sin registrar el original; mismas 44 pruebas del detector + pruebas del endpoint |
+| F5-03 | Contexto y enrutador | Contexto validado contra el catálogo; intención elegida o reglas para texto libre; pruebas por modo |
+| F5-04 | Recuperación determinista (§8.3) | Siempre las 7 Observaciones + progresión del nivel; experiencia activa completa; búsqueda léxica filtrada por nivel; tope de tamaño; `retrieved_unit_ids` registrado |
+| F5-05 | Composer | Prompt versionado (`prompts/system.v1.md`) sin texto curricular escrito a mano (las Observaciones se inyectan desde el JSON); adaptador de Claude con streaming y caché de prompt, probado contra un servidor simulado; `model` y `prompt_version` en cada respuesta |
+| F5-06 | Validación en streaming | Cada bloque se valida antes de mostrarse (unitId recuperado, sin autoridad, sin diagnóstico/nota, sin copia literal, ≤3 caminos); un reintento si no queda ningún bloque válido; literales resueltos por el servidor |
+| F5-07 | Happy en la app | Servicio HTTP con streaming; Happy usable en la app sin la malla completa en el navegador; estados del avatar ligados a eventos; e2e contra `next start` con un composer de guion (solo en modo prueba) |
+| F5-08 | Suite de evaluación | ≥40 escenarios versionados (incluidos los adversariales del §8.8) con criterios duros automáticos; el corredor detecta violaciones (probado con respuestas malas de guion) |
+| F5-09 | Calidad con el modelo real | 100 % criterios duros, ≥85 % rúbrica, p75 primer bloque ≤ 6 s, costo por respuesta medido — **requiere OD-2** |
+
 ## Decisiones abiertas del owner
 OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
 OD-7 resuelta: repositorio `lorenzozanello/happy-time-plataforma`.
@@ -132,6 +155,4 @@ Recomendado: activar protección de `main` (PR obligatorio + CI verde + code own
 Pendiente H-01: confirmación del hash contra un registro externo al ZIP.
 
 ## Próximo paso
-1. Owner: conectar el repositorio a Vercel (OD-1) para la vista previa por PR (cierra F3-09).
-2. Owner + 2–3 docentes: recorrer el prototipo o la vista previa en móvil (cierra F2-09).
-3. F4 (acceso y Guardados en servidor) espera OD-1 y OD-3.
+F5 en curso en la rama `f5-happy-nucleo` (trabajo autónomo por indicación del owner, 2026-10-16). Pendientes del owner: Vercel (OD-1, cierra F3-09), clave y presupuesto de IA (OD-2, cierra F5-09), roles y accesos (OD-3, habilita F4), recorrido con docentes (F2-09).

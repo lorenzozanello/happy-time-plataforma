@@ -4,6 +4,7 @@
  * pieza por pieza y se descarta lo inválido, sin tumbar la app (revisión adversarial F3).
  */
 import { LEVEL_IDS, type LevelId } from "../../domain/curriculum/fields";
+import type { Unit } from "../../domain/curriculum/schema";
 import { catalogExperience, type Catalog } from "../../domain/curriculum/views";
 import { isMode } from "../../domain/happy/modes";
 import type {
@@ -104,8 +105,65 @@ function idea(v: unknown): SavedIdea | null {
   };
 }
 
-/** Valida una respuesta de Happy guardada; sin validador (app sin Happy) se descartan los hilos. */
+/** Valida una respuesta de Happy guardada. */
 export type ResponseCheck = (v: unknown) => boolean;
+
+const strs = (v: unknown, max: number) => Array.isArray(v) && v.every((x) => str(x, max));
+
+/**
+ * Forma de una respuesta guardada, sin Zod (para no cargarlo en el navegador): basta para que
+ * la interfaz la pinte sin fallar. El contenido ya lo validó el servidor al recibirlo.
+ */
+export function looksLikeResponse(v: unknown): boolean {
+  if (!isObj(v) || !isMode(v.mode) || !Array.isArray(v.blocks) || !Array.isArray(v.nextActions))
+    return false;
+  const blockOk = (b: unknown): boolean => {
+    if (!isObj(b)) return false;
+    switch (b.kind) {
+      case "malla_ref":
+        return (
+          str(b.unitId, 80) && str(b.why, 1200) && (b.segment === undefined || str(b.segment, 40))
+        );
+      case "paths":
+        return (
+          Array.isArray(b.paths) &&
+          b.paths.length <= 3 &&
+          b.paths.every((p) => isObj(p) && str(p.title, 160) && str(p.summary, 1200))
+        );
+      case "steps":
+        return str(b.title, 160) && strs(b.items, 1200);
+      case "idea":
+      case "question":
+        return str(b.text, 1200);
+      case "notice":
+        return (
+          str(b.text, 1200) && ["privacy", "out_of_scope", "no_match"].includes(String(b.code))
+        );
+      default:
+        return false;
+    }
+  };
+  const actionOk = (a: unknown) =>
+    isObj(a) &&
+    str(a.id, 40) &&
+    str(a.label, 160) &&
+    ["send", "open_experience", "save_idea"].includes(String(a.kind)) &&
+    (a.payload === undefined || str(a.payload, 400));
+  return v.blocks.length <= 8 && v.blocks.every(blockOk) && v.nextActions.every(actionOk);
+}
+
+/** Forma mínima de una unidad citada guardada (se muestra como literal con su procedencia). */
+function isUnit(v: unknown): v is Unit {
+  return (
+    isObj(v) &&
+    str(v.unitId, 100) &&
+    str(v.text, 20_000) &&
+    str(v.headerLiteral, 500) &&
+    isObj(v.source) &&
+    str(v.source.sheet, 100) &&
+    str(v.source.cell, 20)
+  );
+}
 
 function message(v: unknown, isResponse: ResponseCheck): ThreadMessage | null {
   if (!isObj(v) || !str(v.id, 100) || !num(v.createdAt)) return null;
@@ -119,6 +177,7 @@ function message(v: unknown, isResponse: ResponseCheck): ThreadMessage | null {
     ...opt("mode", v.mode, isMode),
     ...opt("replyTo", v.replyTo, (x): x is string => str(x, 100)),
     ...(v.response !== undefined ? { response: v.response as ThreadMessage["response"] } : {}),
+    ...(Array.isArray(v.units) && v.units.every(isUnit) ? { units: v.units.slice(0, 20) } : {}),
     ...opt("error", v.error, (x): x is string => str(x, 1000)),
     ...(v.feedback === "up" || v.feedback === "down" ? { feedback: v.feedback } : {}),
   } as ThreadMessage;
@@ -154,7 +213,7 @@ function thread(v: unknown, isResponse: ResponseCheck, catalog: Catalog): Thread
 export function sanitizeStored(
   raw: unknown,
   catalog: Catalog,
-  isResponse?: ResponseCheck,
+  isResponse: ResponseCheck = looksLikeResponse,
 ): AppState {
   if (!isObj(raw)) return EMPTY;
   const keep = <T>(items: unknown, fn: (v: unknown) => T | null): T[] =>
@@ -170,8 +229,6 @@ export function sanitizeStored(
     recentSearches: arr(raw.recentSearches)
       .filter((x): x is string => str(x, 120) && x.trim() !== "")
       .slice(0, 8),
-    threads: isResponse
-      ? keep(raw.threads, (t) => thread(t, isResponse, catalog)).slice(0, 30)
-      : [],
+    threads: keep(raw.threads, (t) => thread(t, isResponse, catalog)).slice(0, 30),
   };
 }

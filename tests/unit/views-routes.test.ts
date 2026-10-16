@@ -160,7 +160,7 @@ describe("F3 · datos del navegador no confiables", () => {
     expect(s.favorites.map((f) => f.id)).toEqual(["1"]);
     expect(s.ideas).toEqual([]);
     expect(s.recentSearches).toEqual(["rimas"]);
-    expect(s.threads).toEqual([]); // sin validador de respuestas (app sin Happy) no se cargan hilos
+    expect(s.threads.map((t) => t.id)).toEqual(["t"]); // hilo válido sin mensajes
   });
 
   it("cualquier valor raro produce un estado vacío utilizable", () => {

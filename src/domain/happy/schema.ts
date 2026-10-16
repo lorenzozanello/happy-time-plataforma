@@ -163,6 +163,82 @@ const FORBIDDEN_OUTPUT = [
   /\b(reprueba|reprobo|pierde el (ano|grado))\b/,
 ];
 
+/** Texto que redacta el modelo dentro de un bloque. */
+export function blockStrings(b: Block): string[] {
+  if (b.kind === "malla_ref") return [b.why];
+  if (b.kind === "paths") return b.paths.flatMap((p) => [p.title, p.summary]);
+  if (b.kind === "steps") return [b.title, ...b.items];
+  return [b.text];
+}
+
+/** Reglas sobre texto generado: autoridad institucional, diagnóstico/calificación, copia. */
+export function textErrors(
+  t: string,
+  opts: Pick<ValidationOptions, "curriculumWindows">,
+): string[] {
+  const errors: string[] = [];
+  const n = normalizeForRules(t);
+  if (CLAIMS_AUTHORITY.some((re) => re.test(n)))
+    errors.push(`texto generado reclama autoridad: "${t}"`);
+  if (FORBIDDEN_OUTPUT.some((re) => re.test(n)))
+    errors.push(`texto generado con diagnóstico o calificación: "${t}"`);
+  if (opts.curriculumWindows) {
+    const copied = findCopiedSequence(t, opts.curriculumWindows);
+    if (copied) errors.push(`texto generado copia la malla: "${copied}"`);
+  }
+  return errors;
+}
+
+/**
+ * Valida un bloque aislado (para mostrarlo en streaming apenas llega). No cubre las reglas de
+ * conjunto (total de caminos), que aplica `validateResponse` o el pipeline del servidor.
+ */
+export function validateBlock(
+  raw: unknown,
+  opts: ValidationOptions,
+): { ok: true; block: Block } | { ok: false; errors: string[] } {
+  const parsed = BlockSchema.safeParse(raw);
+  if (!parsed.success)
+    return {
+      ok: false,
+      errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    };
+  const b = parsed.data;
+  const errors: string[] = [];
+  if (b.kind === "malla_ref") {
+    if (!opts.unitExists(b.unitId)) errors.push(`unitId inexistente: ${b.unitId}`);
+    else if (opts.retrieved && !opts.retrieved.has(b.unitId))
+      errors.push(`unitId no recuperado: ${b.unitId}`);
+    if (b.segment && opts.segmentExists && !opts.segmentExists(b.unitId, b.segment))
+      errors.push(`segmento inexistente: ${b.unitId}/${b.segment}`);
+  }
+  for (const t of blockStrings(b)) errors.push(...textErrors(t, opts));
+  return errors.length ? { ok: false, errors } : { ok: true, block: b };
+}
+
+/** Valida una acción sugerida (etiqueta generada y destino). */
+export function validateAction(
+  raw: unknown,
+  opts: ValidationOptions,
+): { ok: true; action: Action } | { ok: false; errors: string[] } {
+  const parsed = ActionSchema.safeParse(raw);
+  if (!parsed.success)
+    return {
+      ok: false,
+      errors: parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`),
+    };
+  const a = parsed.data;
+  const errors = textErrors(a.label, opts);
+  if (
+    a.kind === "open_experience" &&
+    opts.experienceExists &&
+    !opts.experienceExists(a.payload ?? "")
+  )
+    errors.push(`acción hacia una experiencia inexistente: ${a.payload ?? ""}`);
+  if (a.payload && a.kind === "send") errors.push(...textErrors(a.payload, opts));
+  return errors.length ? { ok: false, errors } : { ok: true, action: a };
+}
+
 /**
  * Validación posterior a la generación (§8.4). Devuelve errores legibles; la capa de servicio
  * reintenta una vez y, si persiste, descarta la respuesta.
@@ -188,32 +264,12 @@ export function validateResponse(
     errors.push(`más de ${MAX_PATHS} caminos en la respuesta (${totalPaths})`);
 
   for (const b of r.blocks) {
-    if (b.kind !== "malla_ref") continue;
-    if (!opts.unitExists(b.unitId)) errors.push(`unitId inexistente: ${b.unitId}`);
-    else if (opts.retrieved && !opts.retrieved.has(b.unitId))
-      errors.push(`unitId no recuperado: ${b.unitId}`);
-    if (b.segment && opts.segmentExists && !opts.segmentExists(b.unitId, b.segment))
-      errors.push(`segmento inexistente: ${b.unitId}/${b.segment}`);
+    const v = validateBlock(b, opts);
+    if (!v.ok) errors.push(...v.errors);
   }
   for (const a of r.nextActions) {
-    if (
-      a.kind === "open_experience" &&
-      opts.experienceExists &&
-      !opts.experienceExists(a.payload ?? "")
-    )
-      errors.push(`acción hacia una experiencia inexistente: ${a.payload ?? ""}`);
-  }
-
-  for (const t of generatedStrings(r)) {
-    const n = normalizeForRules(t);
-    if (CLAIMS_AUTHORITY.some((re) => re.test(n)))
-      errors.push(`texto generado reclama autoridad: "${t}"`);
-    if (FORBIDDEN_OUTPUT.some((re) => re.test(n)))
-      errors.push(`texto generado con diagnóstico o calificación: "${t}"`);
-    if (opts.curriculumWindows) {
-      const copied = findCopiedSequence(t, opts.curriculumWindows);
-      if (copied) errors.push(`texto generado copia la malla: "${copied}"`);
-    }
+    const v = validateAction(a, opts);
+    if (!v.ok) errors.push(...v.errors);
   }
   return errors.length ? { ok: false, errors } : { ok: true, response: r };
 }

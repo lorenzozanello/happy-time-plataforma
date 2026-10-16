@@ -1,4 +1,5 @@
 import type { LevelId } from "../../domain/curriculum/fields";
+import type { Unit } from "../../domain/curriculum/schema";
 import type { HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
 
 export interface Session {
@@ -12,15 +13,32 @@ export interface AuthService {
   verifyCode(email: string, code: string): Promise<Session>;
 }
 
+export interface HappyTurn {
+  role: "docente" | "happy";
+  /** Docente: versión redactada. Happy: resumen breve de la respuesta. */
+  text: string;
+}
+
 export interface HappyRequest {
   mode: Mode;
   message: string;
   context: HappyContext;
+  /** Últimos turnos del hilo (memoria por hilo, §8.7). */
+  history?: HappyTurn[];
 }
 
-/** Contrato de Happy (F5 lo implementa con /api/happy). Entrega bloques a medida que llegan. */
+/**
+ * Respuesta para la interfaz: el contrato del modelo + las unidades citadas con su texto
+ * literal, resueltas por el servidor desde la release compilada (nunca por el modelo).
+ */
+export interface HappyReply {
+  response: HappyResponse;
+  units: Unit[];
+}
+
+/** Contrato de Happy (/api/happy en la app; simulador en el prototipo). Entrega bloques a medida que llegan. */
 export interface HappyService {
-  respond(req: HappyRequest, onProgress: (partial: HappyResponse) => void): Promise<HappyResponse>;
+  respond(req: HappyRequest, onProgress: (partial: HappyReply) => void): Promise<HappyReply>;
 }
 
 export interface Services {
@@ -78,6 +96,8 @@ export interface ThreadMessage {
   /** Respuesta o error: id del mensaje de la docente al que responde. */
   replyTo?: string;
   response?: HappyResponse;
+  /** Unidades citadas en `response`, con su literal (para mostrarlas sin la malla completa). */
+  units?: Unit[];
   error?: string;
   feedback?: "up" | "down";
   createdAt: number;

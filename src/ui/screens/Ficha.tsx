@@ -106,10 +106,15 @@ export function FichaScreen({ code }: { code: string }) {
       </header>
 
       {!principleSeen && (
-        <aside className="principle" aria-label="Principio de la malla">
+        <aside
+          className="principle"
+          aria-label="Principio de la malla"
+          data-unit-id={OPENING_PRINCIPLE_UNIT}
+        >
           <p>
             <Literal text={repo.unit(OPENING_PRINCIPLE_UNIT).text} />
           </p>
+          <Provenance unit={repo.unit(OPENING_PRINCIPLE_UNIT)} />
           <button
             type="button"
             className="link"
@@ -300,10 +305,13 @@ function Alerts({ unit, principle }: { unit: Unit; principle: Unit }) {
             <p className="unit__text">
               <Literal text={alerts} />
             </p>
-            <p className="alerts__principle">
+            <div className="alerts__principle" data-unit-id={principle.unitId}>
               <Icon name="info" size={16} />
-              <Literal text={principle.text} />
-            </p>
+              <p>
+                <Literal text={principle.text} />
+              </p>
+              <Provenance unit={principle} />
+            </div>
           </div>
         </>
       ) : (

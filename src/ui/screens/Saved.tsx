@@ -9,9 +9,9 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export function SavedScreen({ tab = "favoritos" }: { tab?: Tab }) {
-  const { state, repo, navigate, dispatch } = useApp();
+  const { state, repo, navigate, replace, dispatch } = useApp();
   const select = (t: Tab) => {
-    navigate({ name: "saved", tab: t });
+    replace({ name: "saved", tab: t });
   };
 
   return (
@@ -29,8 +29,20 @@ export function SavedScreen({ tab = "favoritos" }: { tab?: Tab }) {
             aria-selected={tab === t.id}
             aria-controls={`panel-${t.id}`}
             className={`tabs__tab${tab === t.id ? " is-on" : ""}`}
+            tabIndex={tab === t.id ? 0 : -1}
             onClick={() => {
               select(t.id);
+            }}
+            onKeyDown={(e) => {
+              const i = TABS.findIndex((x) => x.id === tab);
+              const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+              if (!d) return;
+              e.preventDefault();
+              const next = TABS[(i + d + TABS.length) % TABS.length];
+              if (next) {
+                select(next.id);
+                requestAnimationFrame(() => document.getElementById(`tab-${next.id}`)?.focus());
+              }
             }}
           >
             {t.label}

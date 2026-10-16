@@ -6,7 +6,7 @@ import { useApp } from "../app/state";
 import { EmptyState, Highlighted, Icon } from "../components";
 
 export function SearchScreen({ q: initial = "" }: { q?: string }) {
-  const { repo, search, navigate, dispatch } = useApp();
+  const { repo, search, navigate, replace, dispatch } = useApp();
   const [q, setQ] = useState(initial);
   const [level, setLevel] = useState<LevelId | "all">("all");
   const input = useRef<HTMLInputElement>(null);
@@ -68,6 +68,7 @@ export function SearchScreen({ q: initial = "" }: { q?: string }) {
             autoComplete="off"
             onChange={(e) => {
               setQ(e.target.value);
+              replace({ name: "search", q: e.target.value });
             }}
             onBlur={() => {
               dispatch({ type: "search", q });

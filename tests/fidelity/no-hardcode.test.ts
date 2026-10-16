@@ -7,6 +7,7 @@ import { ROOT, release } from "../helpers";
 const CODE_DIRS = ["src", "scripts", "app", "prototype"];
 const CODE_EXT = /\.(ts|tsx|js|jsx|mjs|cjs|py|json|md|css|html)$/;
 /** Ventana deslizante: cualquier secuencia de N palabras consecutivas de la malla delata copia. */
+// La ventana y las palabras vienen de src/domain/curriculum/fingerprint.ts
 const WINDOW = 8;
 
 function walk(dir: string): string[] {

@@ -1103,10 +1103,16 @@ h2.unit__title {
 .alerts__principle {
   margin: 0;
   display: flex;
-  gap: 6px;
+  flex-wrap: wrap;
+  gap: 2px 6px;
   align-items: flex-start;
   font-weight: 700;
   color: var(--fg);
+}
+
+.alerts__principle p {
+  margin: 0;
+  flex: 1 1 12rem;
 }
 
 .alerts__principle svg {
@@ -1315,9 +1321,9 @@ h2.unit__title {
 }
 
 .context-chip span {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  padding-block: 6px;
 }
 
 .context-chip button {
@@ -2022,4 +2028,10 @@ h2.unit__title {
   .happy-avatar--piensa .happy-avatar__hand-down {
     transform: rotate(120deg);
   }
+}
+
+.year-item__now {
+  font-weight: 400;
+  color: var(--fg-2);
+  font-size: 0.9rem;
 }

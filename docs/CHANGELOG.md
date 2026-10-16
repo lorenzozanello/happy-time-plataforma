@@ -7,7 +7,13 @@
 - Pantallas: ingreso con código, elección de niveles, Inicio, Malla con reloj de periodos, ficha completa con procedencia, búsqueda con resaltado, perfil de nivel, progresión, principios, Happy, Guardados y perfil.
 - Contrato de Happy (`HappyResponseSchema` + validador) y detector preliminar de privacidad.
 - Happy simulada que cita la malla por `unitId`; estados del avatar ligados a eventos reales.
-- Prototipo empaquetado en un solo HTML; 28 pruebas e2e (Playwright + axe) en CI; 138 pruebas unitarias.
+- Prototipo empaquetado en un solo HTML; 35 pruebas e2e (Playwright + axe) en CI; 205 pruebas unitarias.
+
+### Corregido (revisión adversarial independiente)
+- Política de privacidad antes de guardar o enviar: solo se persiste la versión redactada.
+- Detector de privacidad centrado en datos identificables (no bloquea PIAR, DUA ni discapacidad).
+- Validador de Happy endurecido contra copia literal, autoridad, diagnósticos, calificaciones y homoglifos.
+- Reintento ligado al mensaje que falló; Volver conserva conversación, malla y búsqueda; foco tras navegar.
 
 ## [F1] 2026-10-16 — Compilador curricular
 ### Agregado

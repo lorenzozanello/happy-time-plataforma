@@ -70,13 +70,12 @@ export function LevelPicker({
 }) {
   const { repo } = useApp();
   return (
-    <div className="level-picker" role="tablist" aria-label="Nivel">
+    <div className="level-picker" role="group" aria-label="Nivel">
       {repo.levels.map((l) => (
         <button
           key={l.id}
           type="button"
-          role="tab"
-          aria-selected={value === l.id}
+          aria-pressed={value === l.id}
           className={`level-tab${value === l.id ? " is-on" : ""}`}
           onClick={() => {
             onChange(l.id);
@@ -91,7 +90,7 @@ export function LevelPicker({
 }
 
 export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; periodIndex?: number }) {
-  const { repo, state, navigate, dispatch } = useApp();
+  const { repo, state, navigate, replace } = useApp();
   const [level, setLevel] = useState<LevelId>(levelId ?? state.work.levelIds[0] ?? "step-1");
   const [period, setPeriod] = useState<number>(periodIndex ?? state.work.periodIndex ?? 1);
   const exps = repo.experiencesOf(level);
@@ -119,6 +118,7 @@ export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; perio
         value={level}
         onChange={(l) => {
           setLevel(l);
+          replace({ name: "malla", levelId: l, periodIndex: period });
         }}
       />
 
@@ -127,7 +127,7 @@ export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; perio
           value={period}
           onChange={(p) => {
             setPeriod(p);
-            dispatch({ type: "work", patch: { periodIndex: p } });
+            replace({ name: "malla", levelId: level, periodIndex: p });
           }}
           titles={titles}
         />
@@ -173,12 +173,16 @@ export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; perio
               <button
                 type="button"
                 className={`year-item${e.code === exp.code ? " is-on" : ""}`}
+                aria-current={e.code === exp.code ? "true" : undefined}
                 onClick={() => {
                   navigate({ name: "ficha", code: e.code });
                 }}
               >
                 <PeriodChip index={e.periodIndex} label={ROMAN[e.periodIndex - 1] ?? ""} />
-                <span className="year-item__title">{repo.title(e.code)}</span>
+                <span className="year-item__title">
+                  {repo.title(e.code)}
+                  {e.code === exp.code && <span className="year-item__now"> · seleccionado</span>}
+                </span>
                 <Icon name="chevron" size={18} />
               </button>
             </li>

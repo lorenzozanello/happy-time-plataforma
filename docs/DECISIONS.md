@@ -89,3 +89,10 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 - **Empaquetado propio en un solo HTML** (`scripts/build-prototype.ts`) en lugar de `vite-plugin-singlefile`, que arrastraba 3 vulnerabilidades altas (`braces`).
 - **Contrato de Happy adelantado:** `src/domain/happy/schema.ts` (Zod + validador posterior) y `privacy.ts` (detector preliminar) ya son los de F5; el simulador del prototipo los cumple y las pruebas lo verifican.
 - **Reloj de Happy provisional:** re-ilustrado desde la especificación del handoff en un único componente (`src/ui/happy/HappyAvatar.tsx`), reemplazable cuando llegue el SVG institucional (OD-6).
+
+## ADR-014 — Política de privacidad de entrada y validador de salida (refinan ADR-009 y ADR-007)
+**Estado:** Aceptada (2026-10-16), tras la revisión adversarial independiente de F2.
+**Decisión:**
+- **Entrada:** se marca como sensible lo que **identifica** a una persona: nombre, contacto, documento o dirección. Los términos de salud o apoyo por sí solos (PIAR, DUA, discapacidad, “un niño con autismo”) **no** se bloquean: son vocabulario de la malla y de la inclusión. La política corre en la interfaz **antes** de guardar o enviar: solo se persiste la versión redactada y, si hay datos identificables, no se llama a Happy. En F5 se repite en el servidor.
+- **Salida:** el validador normaliza Unicode (NFKC, invisibles, homoglifos, tildes) y rechaza: reclamos de autoridad institucional en cualquier texto generado (incluidos avisos y etiquetas de acción), diagnósticos y calificaciones, más de 3 caminos en toda la respuesta, copia literal de la malla (ventana de 8 palabras), citas no recuperadas, segmentos o experiencias inexistentes, textos sin límite y modos no habilitados.
+- Corpus de prueba: 44 mensajes de privacidad y 30 casos de validador, tomados de la revisión.

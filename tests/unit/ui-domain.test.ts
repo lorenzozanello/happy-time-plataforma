@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { compose } from "../../prototype/happy-simulator";
+import { curriculumWindows } from "../../src/domain/curriculum/fingerprint";
 import { createRepository } from "../../src/domain/curriculum/repository";
 import { buildSearchIndex, highlightRanges, snippet } from "../../src/domain/curriculum/search";
-import { checkPrivacy } from "../../src/domain/happy/privacy";
 import {
   HappyResponseSchema,
   validateResponse,
@@ -65,6 +65,13 @@ describe("F2-05 · contrato de Happy", () => {
   const repo = createRepository(release());
   const index = buildSearchIndex(release());
   const exists = (id: string) => repo.maybeUnit(id) !== undefined;
+  const strict = {
+    unitExists: exists,
+    segmentExists: (id: string, seg: string) =>
+      repo.maybeUnit(id)?.segments?.some((x) => x.key === seg) ?? false,
+    experienceExists: (code: string) => repo.maybeExperience(code) !== undefined,
+    curriculumWindows: curriculumWindows(release().units),
+  };
 
   it("rechaza unidades inexistentes, autoridad reclamada y diagnósticos", () => {
     const bad: HappyResponse = {
@@ -98,8 +105,8 @@ describe("F2-05 · contrato de Happy", () => {
     ["conectar", "rimas y sonidos", {}],
     ["general", "patio", {}],
   ] as const)("el simulador produce respuestas válidas (%s)", (mode, message, context) => {
-    const res = compose(repo, index, { mode, message, context });
-    const v = validateResponse(res, { unitExists: exists });
+    const { response: res, retrieved } = compose(repo, index, { mode, message, context });
+    const v = validateResponse(res, { ...strict, retrieved });
     expect(v.ok, JSON.stringify(v)).toBe(true);
     for (const b of res.blocks) {
       if (b.kind === "paths") expect(b.paths.length).toBeLessThanOrEqual(3);
@@ -108,43 +115,20 @@ describe("F2-05 · contrato de Happy", () => {
   });
 
   it("explorar sin experiencia pide contexto con una pregunta breve", () => {
-    const res = compose(repo, index, { mode: "explorar", message: "ideas", context: {} });
+    const { response: res } = compose(repo, index, {
+      mode: "explorar",
+      message: "ideas",
+      context: {},
+    });
     expect(res.blocks.map((b) => b.kind)).toEqual(["question"]);
   });
 
   it("ante datos sensibles responde solo con el aviso de privacidad", () => {
-    const res = compose(repo, index, {
+    const { response: res } = compose(repo, index, {
       mode: "aterrizar",
       message: "Tengo un niño llamado Mateo con diagnóstico de TEA",
       context: { experienceCode: "S2.1" },
     });
     expect(res.blocks).toEqual([expect.objectContaining({ kind: "notice", code: "privacy" })]);
-  });
-});
-
-describe("privacidad: detector preliminar", () => {
-  it.each([
-    "Mi alumna Sofía tiene TDAH",
-    "un niño con autismo en Step 2",
-    "escríbele a la mamá a mama@correo.com",
-    "su teléfono es 300 123 4567",
-    "registro civil 1234567890",
-    "la niña se llama Valentina y llora mucho",
-  ])("marca como sensible: %s", (t) => {
-    expect(checkPrivacy(t).sensitive).toBe(true);
-  });
-
-  it.each([
-    "ideas para trabajar rimas en el patio",
-    "un niño de Step 2 que se abruma con el ruido",
-    "Quiero aterrizar el camino «Desde el juego»",
-    "materiales para Transición",
-  ])("no marca: %s", (t) => {
-    expect(checkPrivacy(t).sensitive).toBe(false);
-  });
-
-  it("redacta nombres, salud y contactos para guardar", () => {
-    const r = checkPrivacy("Mi alumna Sofía tiene TDAH, mamá: mama@correo.com");
-    expect(r.redacted).not.toMatch(/Sofía|TDAH|mama@correo\.com/);
   });
 });

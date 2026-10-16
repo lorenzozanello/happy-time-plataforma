@@ -61,6 +61,9 @@ export function createPrototypeServices(
       setFailHappy(v) {
         controls.failNext = v;
       },
+      getFailHappy() {
+        return controls.failNext;
+      },
     },
   };
 }

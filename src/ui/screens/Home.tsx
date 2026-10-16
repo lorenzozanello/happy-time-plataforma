@@ -14,6 +14,9 @@ export function HomeScreen() {
   const { repo, state, navigate } = useApp();
   const { work, recentSearches, favorites } = state;
   const last = work.lastExperience ? repo.maybeExperience(work.lastExperience) : undefined;
+  const lastThread = work.lastThreadId
+    ? state.threads.find((t) => t.id === work.lastThreadId)
+    : undefined;
   const period = work.periodIndex ?? 1;
   const mine = work.levelIds.map((l) => repo.experienceAt(l, period));
   const happyContext = last
@@ -101,6 +104,24 @@ export function HomeScreen() {
           </ul>
         )}
       </section>
+
+      {lastThread && (
+        <section aria-labelledby="retomar">
+          <h2 id="retomar" className="section-title">
+            Retomar con Happy
+          </h2>
+          <button
+            type="button"
+            className="thread-item"
+            onClick={() => {
+              navigate({ name: "happy", threadId: lastThread.id });
+            }}
+          >
+            <span>{lastThread.title}</span>
+            <Icon name="chevron" size={18} />
+          </button>
+        </section>
+      )}
 
       <section className="happy-entry" aria-labelledby="happy-entry">
         <div className="happy-entry__head">

@@ -14,7 +14,7 @@ import { LevelsSetup } from "./Access";
 export function ProfileScreen() {
   const { state, dispatch, navigate, services, repo } = useApp();
   const [saved, setSaved] = useState(false);
-  const [failOn, setFailOn] = useState(false);
+  const [failOn, setFailOn] = useState(() => services.prototype?.getFailHappy() ?? false);
   return (
     <div className="screen">
       <header className="screen__head">

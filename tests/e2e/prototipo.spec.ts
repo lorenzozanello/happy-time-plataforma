@@ -138,7 +138,7 @@ test.describe("Recorrido 2 · consulta rápida", () => {
     await page.getByRole("radio", { name: /^Periodo III:/ }).press("ArrowRight");
     await expect(page.getByRole("radio", { name: /^Periodo IV:/ })).toBeFocused();
     await expect(page.locator(".exp-card--hero")).toContainText(unit("S2.4#titulo").text);
-    await page.getByRole("tab", { name: /Transición/ }).click();
+    await page.getByRole("button", { name: /Transición/ }).click();
     await expect(page.locator(".exp-card--hero")).toContainText(unit("T.4#titulo").text);
     await expectNoHorizontalScroll(page);
     await expectTouchTargets(page);
@@ -219,8 +219,16 @@ test.describe("Recorrido 4 · Happy contextual", () => {
     await page.locator(".tabbar").getByRole("button", { name: "Happy" }).click();
     await page.getByLabel("Mensaje para Happy").fill("Mi alumna Sofía tiene TDAH, ¿qué hago?");
     await page.getByLabel("Mensaje para Happy").press("Enter");
-    await expect(page.locator(".notice--privacy")).toContainText("sin nombres, diagnósticos");
+    await expect(page.locator(".notice--privacy")).toContainText("sin nombres");
     await expect(page.locator(".block--malla")).toHaveCount(0);
+    // Solo se guarda la versión redactada: ni el nombre ni el teléfono quedan en el navegador.
+    await page.getByLabel("Mensaje para Happy").fill("Su mamá es 3001234567");
+    await page.getByLabel("Mensaje para Happy").press("Enter");
+    await expect(page.locator(".notice--privacy")).toHaveCount(2);
+    const stored = await page.evaluate(() => JSON.stringify(window.localStorage));
+    expect(stored).not.toContain("Sofía");
+    expect(stored).not.toContain("3001234567");
+    await expect(page.locator(".bubble--docente").first()).toContainText("[nombre]");
   });
 
   test("si Happy falla, muestra el error y permite reintentar", async ({ page }) => {
@@ -288,7 +296,7 @@ test.describe("Estados y referencia", () => {
     await expectAccessible(page);
     await page.getByRole("button", { name: "Volver" }).click();
     await page.getByRole("button", { name: "Progresión por dimensión" }).click();
-    await page.getByRole("tab", { name: "Corporal" }).click();
+    await page.getByRole("button", { name: "Corporal" }).click();
     await expect(page.locator(".progression")).toContainText(unit("PROG:kinder#corporal").text);
     await expectNoHorizontalScroll(page);
     await expectAccessible(page);
@@ -319,5 +327,108 @@ test.describe("Tema oscuro", () => {
     await page.getByRole("button", { name: /Pedir ideas para/ }).click();
     await expect(page.locator(".block--malla").first()).toBeVisible();
     await expectAccessible(page);
+  });
+});
+
+test.describe("Correcciones de la revisión independiente", () => {
+  test("reintentar conserva el modo del mensaje que falló", async ({ page }) => {
+    await signIn(page);
+    await page.locator("main").getByText(unit("S2.1#titulo").text).first().click();
+    await page.locator(".ficha__actions").getByRole("button", { name: "Pensemos juntas" }).click();
+    await page.getByRole("radio", { name: /Necesito ideas/ }).click();
+    await page.getByRole("button", { name: "Pedir ideas para S2.1" }).click();
+    await expect(page.locator(".path")).toHaveCount(3);
+    await page.locator(".topbar").getByRole("button", { name: "Tu perfil" }).click();
+    await page.getByLabel("La próxima respuesta de Happy falla").check();
+    await page.getByRole("button", { name: "Volver" }).click();
+    await page.locator(".path").first().getByRole("button", { name: "Aterrizar" }).click();
+    await expect(page.getByRole("alert")).toContainText("Happy no pudo responder");
+    await page.getByRole("button", { name: "Reintentar" }).click();
+    await expect(page.locator(".steps")).toBeVisible();
+    await expect(page.locator(".path")).toHaveCount(3);
+    await expect(page.getByRole("alert")).toHaveCount(0);
+  });
+
+  test("Volver conserva la conversación, la selección de la malla y la búsqueda", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.locator(".tabbar").getByRole("button", { name: "Happy" }).click();
+    await page.getByLabel("Mensaje para Happy").fill("rimas");
+    await page.getByLabel("Mensaje para Happy").press("Enter");
+    await page.getByRole("button", { name: "Ver en la ficha" }).first().click();
+    await page.getByRole("button", { name: "Volver" }).click();
+    await expect(page.locator(".bubble--docente")).toHaveText("rimas");
+
+    await page.locator(".tabbar").getByRole("button", { name: "Malla" }).click();
+    await page.getByRole("button", { name: /Transición/ }).click();
+    await page.getByRole("radio", { name: /^Periodo III:/ }).click();
+    await page.getByRole("button", { name: "Abrir ficha" }).click();
+    await page.getByRole("button", { name: "Volver" }).click();
+    await expect(page.locator(".exp-card--hero")).toContainText(unit("T.3#titulo").text);
+
+    await page.locator(".topbar").getByRole("button", { name: "Abrir búsqueda" }).click();
+    await page.getByLabel("Buscar en la malla").fill("rimas");
+    await page.locator(".result").first().click();
+    await page.getByRole("button", { name: "Volver" }).click();
+    await expect(page.getByLabel("Buscar en la malla")).toHaveValue("rimas");
+  });
+
+  test("el foco va al título tras navegar y las pestañas responden a las flechas", async ({
+    page,
+  }) => {
+    await signIn(page);
+    await page.locator(".tabbar").getByRole("button", { name: "Malla" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Malla curricular" })).toBeFocused();
+    await page.locator(".tabbar").getByRole("button", { name: "Guardados" }).click();
+    await page.getByRole("tab", { name: "Favoritos" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Ideas" })).toBeFocused();
+    await expect(page.getByRole("tab", { name: "Ideas" })).toHaveAttribute("aria-selected", "true");
+  });
+});
+
+test.describe("Fidelidad: barrido de las 20 fichas", () => {
+  test("cada unidad de cada ficha muestra su literal exacto", async ({ page }, info) => {
+    test.skip(info.project.name !== "escritorio", "basta con un proyecto");
+    test.setTimeout(120_000);
+    await signIn(page, ["Step 1"]);
+    await page.locator(".tabbar").getByRole("button", { name: "Malla" }).click();
+    await page.getByRole("button", { name: "Abrir ficha" }).click();
+    const codes = [...new Set(release.units.flatMap((u) => (u.code ? [u.code] : [])))];
+    for (const [i, code] of codes.entries()) {
+      await expect(page.locator(".ficha .code").first()).toHaveText(code);
+      const closed = page.locator("details.group:not([open]) summary");
+      while ((await closed.count()) > 0) await closed.first().click();
+      const problems = await page.evaluate(
+        ({ units }) =>
+          units.flatMap((u) => {
+            const el = document.querySelector(`[data-unit-id="${u.unitId}"]`);
+            if (!el) return [`${u.unitId}: no está en la ficha`];
+            const shown = el.textContent.replace(/\s+/g, " ");
+            const pieces = u.segs.length ? u.segs : [u.text];
+            return pieces.every((p) => shown.includes(p.replace(/\s+/g, " ")))
+              ? []
+              : [`${u.unitId}: el literal no coincide`];
+          }),
+        {
+          units: release.units
+            .filter((u) => u.code === code && !u.unitId.endsWith("#titulo"))
+            .map((u) => {
+              const full = u as Unit & {
+                segments?: { valueStart: number; valueEnd: number }[];
+              };
+              return {
+                unitId: u.unitId,
+                text: u.text,
+                segs: (full.segments ?? []).map((s) => u.text.slice(s.valueStart, s.valueEnd)),
+              };
+            }),
+        },
+      );
+      expect(problems).toEqual([]);
+      await expect(page.getByRole("heading", { level: 1 })).toHaveText(unit(`${code}#titulo`).text);
+      if (i < codes.length - 1) await page.locator(".ficha__next").click();
+    }
   });
 });

@@ -78,14 +78,16 @@ Revisión adversarial independiente: 1 defecto alto (atribución no verificada),
 | F2-01 | ✅ | 22 pares texto/fondo × 2 temas con contraste AA calculado (`ui-domain.test.ts`) |
 | F2-02 | ✅ | `HappyAvatar`: 5 estados × 5 tamaños, hoja de identidad en el prototipo (25 avatares verificados en e2e) — **provisional** |
 | F2-03 | ✅ | Ingreso, Inicio, Malla, ficha, búsqueda, perfil de nivel, progresión, principios, Happy, Guardados, perfil |
-| F2-04 | ✅ | Texto institucional por `unitId`; procedencia en cada sección; anti-hardcode cubre `src/` y `prototype/`; e2e compara literales con el JSON compilado |
-| F2-05 | ✅ | Simulador valida contra `HappyResponseSchema` + validador posterior; ≤3 caminos; aviso de privacidad; estados ligados a eventos (e2e) |
-| F2-06 | ✅ | Vacíos (Guardados, búsqueda), carga (esqueleto), error con reintento y sin conexión verificados en e2e |
-| F2-07 | ✅ | Sin scroll horizontal a 360 px; objetivos ≥44 px; axe sin violaciones serias en claro y oscuro |
-| F2-08 | ✅ | 14 escenarios e2e × 2 proyectos (360 px y escritorio) = 28 pruebas; job de CI |
+| F2-04 | ✅ | Texto institucional por `unitId`; procedencia en cada sección (incluidos los principios dentro de la ficha); anti-hardcode cubre `src/` y `prototype/`; barrido e2e de las 20 fichas: 480 unidades con su literal exacto |
+| F2-05 | ✅ | Validador endurecido (ADR-014, 30 casos); política de privacidad antes de guardar/enviar (44 casos + e2e sobre el almacenamiento); ≤3 caminos en toda la respuesta; estados ligados a eventos |
+| F2-06 | ✅ | Vacíos (Guardados, búsqueda), carga y error con reintento en las vistas con datos remotos (Happy, ingreso) y sin conexión, verificados en e2e. La malla viaja en el build: no tiene estado de carga |
+| F2-07 | ✅ | Sin scroll horizontal a 360 px; objetivos ≥44 px; axe sin violaciones serias en claro y oscuro; foco al título tras navegar; flechas en pestañas y reloj; `scroll-padding` bajo el encabezado fijo |
+| F2-08 | ✅ | 18 escenarios e2e × 2 proyectos (360 px y escritorio) + barrido de fidelidad = 35 pruebas; job de CI |
 | F2-09 | ⏳ | Prototipo publicado; falta el recorrido del owner y 2–3 docentes en móvil |
 
-Hallazgos durante la verificación (corregidos): el compositor fijo de Happy tapaba el último botón tras desplazarse (axe `target-size`); la tabla de identidad no era desplazable con teclado.
+Hallazgos durante la verificación (corregidos): el compositor fijo de Happy tapaba el último botón tras desplazarse; la tabla de identidad no era desplazable con teclado; en CI, con las tipografías reales, un botón quedaba bajo el encabezado fijo.
+
+Revisión adversarial independiente de F2 (corregida en el mismo PR): **alto** — los mensajes con datos sensibles se guardaban completos; **alto** — el validador de Happy tenía atajos (6 caminos en dos bloques, copia literal, autoridad con otra redacción, homoglifos); **medio** — falsos negativos y falsos positivos del detector de privacidad, reintento con el modo equivocado, Volver perdía el estado, chips de contexto no persistían, accesibilidad (foco, pestañas, estado solo por negrita); **bajo** — principios sin procedencia, citas de segmento sin marca de fragmento, ideas duplicadas.
 
 ## Decisiones abiertas del owner
 OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.

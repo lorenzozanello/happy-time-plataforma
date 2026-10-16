@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { shortHeader, segmentValue } from "../../domain/curriculum/repository";
+import { shortHeader } from "../../domain/curriculum/repository";
+import { checkPrivacy, PRIVACY_MESSAGE } from "../../domain/happy/privacy";
 import type { Block, HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
-import { newId, useApp } from "../app/state";
+import { newId, now, useApp } from "../app/state";
 import type { Thread, ThreadMessage } from "../app/types";
 import { Button, ErrorState, Icon, IconButton, Literal, Provenance, Skeleton } from "../components";
 import { HappyAvatar, HappyLockup, type HappyState } from "../happy/HappyAvatar";
@@ -28,7 +29,7 @@ export function HappyScreen({
   context?: HappyContext;
 }) {
   const app = useApp();
-  const { state, navigate, dispatch, services, repo, online } = app;
+  const { state, navigate, replace, dispatch, services, repo, online } = app;
   const existing = threadId ? state.threads.find((t) => t.id === threadId) : undefined;
   const [thread, setThread] = useState<Thread | undefined>(existing);
   const [mode, setMode] = useState<Mode | undefined>(existing?.mode ?? initialMode);
@@ -79,6 +80,13 @@ export function HappyScreen({
     setThread(t);
     dispatch({ type: "upsertThread", thread: t });
     dispatch({ type: "work", patch: { lastThreadId: t.id } });
+    // La ruta guarda la conversación: al volver desde una ficha se retoma donde estaba.
+    replace({ name: "happy", threadId: t.id });
+  };
+
+  const updateContext = (next: HappyContext) => {
+    setContext(next);
+    if (thread) persist({ ...thread, context: next });
   };
 
   async function send(
@@ -86,30 +94,55 @@ export function HappyScreen({
     m: Mode = mode ?? "general",
     from: Thread | undefined = thread,
   ) {
-    const message = text.trim();
-    if (!message || phase === "thinking" || phase === "streaming") return;
+    const raw = text.trim();
+    if (!raw || phase === "thinking" || phase === "streaming") return;
     setMode(m);
+    // Política de entrada (ADR-009): solo se guarda la versión redactada; si identifica a una
+    // persona, no se envía a Happy y se pide reformular.
+    const privacy = checkPrivacy(raw);
+    const stored = privacy.redacted;
     const userMsg: ThreadMessage = {
       id: newId(),
       role: "docente",
-      text: message,
-      createdAt: Date.now(),
+      text: stored,
+      mode: m,
+      createdAt: now(),
     };
     const base: Thread = from ?? {
       id: newId(),
       mode: m,
       context,
-      title: message.length > 60 ? `${message.slice(0, 57)}…` : message,
+      title: stored.length > 60 ? `${stored.slice(0, 57)}…` : stored,
       messages: [],
-      updatedAt: Date.now(),
+      updatedAt: now(),
     };
-    let current: Thread = { ...base, messages: [...base.messages, userMsg], updatedAt: Date.now() };
-    persist(current);
+    let current: Thread = { ...base, messages: [...base.messages, userMsg], updatedAt: now() };
     setDraft("");
+    if (privacy.sensitive) {
+      persist({
+        ...current,
+        messages: [
+          ...current.messages,
+          {
+            id: newId(),
+            role: "happy",
+            replyTo: userMsg.id,
+            response: {
+              mode: m,
+              blocks: [{ kind: "notice", code: "privacy", text: PRIVACY_MESSAGE }],
+              nextActions: [],
+            },
+            createdAt: now(),
+          },
+        ],
+      });
+      return;
+    }
+    persist(current);
     setPhase("thinking"); // feedback local inmediato (<150 ms)
     setPartial(null);
     try {
-      const response = await services.happy.respond({ mode: m, message, context }, (p) => {
+      const response = await services.happy.respond({ mode: m, message: raw, context }, (p) => {
         setPhase("streaming");
         setPartial(p);
       });
@@ -117,9 +150,9 @@ export function HappyScreen({
         ...current,
         messages: [
           ...current.messages,
-          { id: newId(), role: "happy", response, createdAt: Date.now() },
+          { id: newId(), role: "happy", replyTo: userMsg.id, response, createdAt: now() },
         ],
-        updatedAt: Date.now(),
+        updatedAt: now(),
       };
       persist(current);
       setPartial(null);
@@ -132,9 +165,10 @@ export function HappyScreen({
           {
             id: newId(),
             role: "happy",
+            replyTo: userMsg.id,
             error:
               "Happy no pudo responder esta vez. Tu mensaje quedó guardado; vuelve a intentarlo.",
-            createdAt: Date.now(),
+            createdAt: now(),
           },
         ],
       };
@@ -144,18 +178,27 @@ export function HappyScreen({
     }
   }
 
-  const retry = () => {
+  /** Reintenta el mensaje que falló (solo el último error), con el modo con que se envió. */
+  const retry = (errorId: string) => {
     if (!thread) return;
-    const lastUser = [...thread.messages].reverse().find((m) => m.role === "docente");
-    if (!lastUser?.text) return;
+    const err = thread.messages.find((x) => x.id === errorId);
+    const original = thread.messages.find((x) => x.id === err?.replyTo);
+    if (!err || !original?.text) return;
     const cleaned = {
       ...thread,
-      messages: thread.messages.filter((m) => !m.error && m.id !== lastUser.id),
+      messages: thread.messages.filter((x) => x.id !== err.id && x.id !== original.id),
     };
-    void send(lastUser.text, thread.mode, cleaned);
+    void send(original.text, original.mode ?? thread.mode, cleaned);
   };
 
   const saveIdea = (title: string, text: string, response: HappyResponse) => {
+    const dup = state.ideas.some(
+      (i) => i.title === title && i.text === text && i.threadId === thread?.id,
+    );
+    if (dup) {
+      setToast("Esa idea ya está en Guardados");
+      return;
+    }
     dispatch({
       type: "saveIdea",
       idea: {
@@ -166,7 +209,7 @@ export function HappyScreen({
         ...(context.experienceCode ? { experienceCode: context.experienceCode } : {}),
         ...(thread ? { threadId: thread.id } : {}),
         release: repo.release.release,
-        createdAt: Date.now(),
+        createdAt: now(),
       },
     });
     setToast("Idea guardada en Guardados");
@@ -187,6 +230,7 @@ export function HappyScreen({
   return (
     <div className="screen happy">
       <header className="happy__head">
+        {started && <h1 className="sr-only">Conversación con Happy</h1>}
         <HappyLockup state={avatarState} size={48} />
         <p className="sr-only" aria-live="polite">
           {avatarState === "piensa"
@@ -205,9 +249,12 @@ export function HappyScreen({
       <ContextChips
         context={context}
         onRemove={(k) => {
-          // Quitar el nivel también quita periodo y experiencia (dependen de él).
-          const drop = k === "levelId" ? ["levelId", "periodIndex", "experienceCode"] : [k];
-          setContext(
+          // Nivel + periodo identifican una experiencia: quitar uno quita lo que depende de él.
+          const drop =
+            k === "levelId"
+              ? ["levelId", "periodIndex", "experienceCode"]
+              : ["periodIndex", "experienceCode"];
+          updateContext(
             Object.fromEntries(Object.entries(context).filter(([key]) => !drop.includes(key))),
           );
         }}
@@ -263,7 +310,17 @@ export function HappyScreen({
                 {m.text}
               </p>
             ) : m.error ? (
-              <ErrorState key={m.id} message={m.error} onRetry={retry} />
+              <ErrorState
+                key={m.id}
+                message={m.error}
+                {...(m.id === thread.messages.at(-1)?.id && !busy
+                  ? {
+                      onRetry: () => {
+                        retry(m.id);
+                      },
+                    }
+                  : {})}
+              />
             ) : m.response ? (
               <ResponseView
                 key={m.id}
@@ -494,13 +551,16 @@ function BlockView({
     case "malla_ref": {
       const u = repo.maybeUnit(block.unitId);
       if (!u) return null; // el validador ya lo impide; defensa adicional
-      const text = block.segment ? (segmentValue(u, block.segment) ?? u.text) : u.text;
+      const seg = block.segment ? u.segments?.find((s) => s.key === block.segment) : undefined;
+      const text = seg ? u.text.slice(seg.valueStart, seg.valueEnd) : u.text;
+      const segLabel = seg?.label;
       return (
         <section className="block block--malla" data-unit-id={u.unitId}>
           <p className="block__label">Desde nuestra malla…</p>
           <p className="block__where">
             {u.code && <span className="code">{u.code}</span>} {u.code ? repo.title(u.code) : ""} ·{" "}
             {shortHeader(u.headerLiteral)}
+            {segLabel && ` · ${segLabel} (fragmento)`}
           </p>
           <p className="block__literal">
             <Literal text={text} />

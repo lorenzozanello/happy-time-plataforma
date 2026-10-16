@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { useApp } from "./app/state";
 import { tabOf, type Route, type TabName } from "./app/types";
 import { Icon, IconButton, OfflineBanner } from "./components";
@@ -20,7 +20,7 @@ const TABS: { id: TabName; label: string; route: Route; icon: ReactNode }[] = [
   { id: "saved", label: "Guardados", route: { name: "saved" }, icon: <Icon name="saved" /> },
 ];
 
-/** Clave estable por pantalla: remonta el estado local al cambiar de ruta. */
+/** Identidad de una ruta raíz (pestañas). */
 function routeKey(r: Route): string {
   return JSON.stringify(r);
 }
@@ -64,7 +64,22 @@ function Screen({ route }: { route: Route }) {
 }
 
 export function App() {
-  const { state, route, navigate, back, canGoBack, online } = useApp();
+  const { state, route, visit, navigate, back, canGoBack, online } = useApp();
+  const firstVisit = useRef(true);
+
+  // Tras navegar, el foco va al título de la nueva pantalla (lectores de pantalla y teclado).
+  useEffect(() => {
+    if (firstVisit.current) {
+      firstVisit.current = false;
+      return;
+    }
+    const h1 = document.querySelector<HTMLElement>("main h1");
+    if (h1) {
+      h1.tabIndex = -1;
+      h1.focus({ preventScroll: true });
+    }
+  }, [visit]);
+
   if (!state.session) return <SignInScreen />;
   if (!state.work.onboarded) return <OnboardingScreen />;
 
@@ -124,7 +139,7 @@ export function App() {
 
       <main id="main" className="main" tabIndex={-1}>
         {!online && <OfflineBanner />}
-        <Screen key={routeKey(route)} route={route} />
+        <Screen key={`${route.name}#${String(visit)}`} route={route} />
       </main>
     </div>
   );

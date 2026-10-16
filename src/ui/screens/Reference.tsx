@@ -73,15 +73,17 @@ export function ProgressionScreen() {
     <div className="screen">
       <header className="screen__head">
         <h1 className="display">Progresión por dimensión</h1>
-        <p className="lead">Cómo avanza cada dimensión del desarrollo de Step 1 a Transición.</p>
+        <p className="lead">
+          Cómo avanza cada dimensión del desarrollo de {repo.levels[0]?.labelLiteral} a{" "}
+          {repo.levels.at(-1)?.labelLiteral}.
+        </p>
       </header>
-      <div className="chip-row" role="tablist" aria-label="Dimensión">
+      <div className="chip-row" role="group" aria-label="Dimensión">
         {dims.map((d) => (
           <button
             key={d.key}
             type="button"
-            role="tab"
-            aria-selected={dim === d.key}
+            aria-pressed={dim === d.key}
             className={`chip${dim === d.key ? " is-on" : ""}`}
             onClick={() => {
               setDim(d.key);

@@ -29,7 +29,7 @@ export interface Services {
   /** Persistencia por navegador (prototipo). F4 la reemplaza por la base de datos. */
   storage: KeyValueStorage;
   /** Controles exclusivos del prototipo (ausentes en producción). */
-  prototype?: { setFailHappy(v: boolean): void };
+  prototype?: { setFailHappy(v: boolean): void; getFailHappy(): boolean };
 }
 
 export interface KeyValueStorage {
@@ -71,7 +71,12 @@ export interface SavedIdea {
 export interface ThreadMessage {
   id: string;
   role: "docente" | "happy";
+  /** Mensaje de la docente: siempre la versión redactada por la política de privacidad. */
   text?: string;
+  /** Modo con que se envió el mensaje (para reintentar igual). */
+  mode?: Mode;
+  /** Respuesta o error: id del mensaje de la docente al que responde. */
+  replyTo?: string;
   response?: HappyResponse;
   error?: string;
   feedback?: "up" | "down";

@@ -4,10 +4,12 @@
  * las CITA POR REFERENCIA (unitId); el texto generado es genérico y queda etiquetado en la UI.
  */
 import type { ExperienceFieldKey } from "../src/domain/curriculum/fields";
+import { curriculumWindows } from "../src/domain/curriculum/fingerprint";
 import type { CurriculumRepository } from "../src/domain/curriculum/repository";
 import type { SearchIndex } from "../src/domain/curriculum/search";
 import { checkPrivacy, PRIVACY_MESSAGE } from "../src/domain/happy/privacy";
 import {
+  V1_MODES,
   validateResponse,
   type Block,
   type HappyContext,
@@ -29,6 +31,7 @@ export function createHappySimulator(
   index: SearchIndex,
   controls: SimulatorControls,
 ): HappyService {
+  const windows = curriculumWindows(repo.release.units);
   return {
     async respond(req, onProgress) {
       await sleep(controls.firstBlockDelay);
@@ -36,9 +39,15 @@ export function createHappySimulator(
         controls.failNext = false;
         throw new Error("Happy no pudo responder");
       }
-      const full = compose(repo, index, req);
+      const { response: full, retrieved } = compose(repo, index, req);
       const check = validateResponse(full, {
         unitExists: (id) => repo.maybeUnit(id) !== undefined,
+        segmentExists: (id, seg) =>
+          repo.maybeUnit(id)?.segments?.some((x) => x.key === seg) ?? false,
+        experienceExists: (code) => repo.maybeExperience(code) !== undefined,
+        retrieved,
+        curriculumWindows: windows,
+        allowedModes: V1_MODES,
       });
       if (!check.ok) throw new Error(`Respuesta inválida: ${check.errors.join("; ")}`);
       for (let i = 1; i <= full.blocks.length; i++) {
@@ -88,7 +97,25 @@ const ref = (unitId: string, why: string, segment?: string): Block => ({
   ...(segment ? { segment } : {}),
 });
 
+/**
+ * Recuperación + composición. `retrieved` es el conjunto que la etapa de recuperación entregó
+ * (campos de la experiencia activa + mejores coincidencias léxicas); el validador exige que toda
+ * cita pertenezca a él.
+ */
 export function compose(
+  repo: CurriculumRepository,
+  index: SearchIndex,
+  req: HappyRequest,
+): { response: HappyResponse; retrieved: Set<string> } {
+  const code = experienceOf(repo, req.context);
+  const retrieved = new Set<string>([
+    ...(code ? Object.values(repo.experience(code).fieldUnitIds) : []),
+    ...retrieve(repo, index, req.message, req.context.levelId, 10).map((h) => h.unitId),
+  ]);
+  return { response: composeResponse(repo, index, req), retrieved };
+}
+
+function composeResponse(
   repo: CurriculumRepository,
   index: SearchIndex,
   req: HappyRequest,

@@ -5,6 +5,7 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -58,7 +59,8 @@ function reducer(state: AppState, a: Action): AppState {
     case "signIn":
       return { ...state, session: a.session };
     case "signOut":
-      return { ...state, session: null };
+      // En el prototipo los datos viven en este navegador: cerrar sesión los borra (equipos compartidos).
+      return EMPTY;
     case "work":
       return { ...state, work: { ...state.work, ...a.patch } };
     case "toggleFavorite": {
@@ -105,7 +107,11 @@ interface AppApi {
   search: SearchIndex;
   services: Services;
   route: Route;
+  /** Identificador de la visita actual: cambia al navegar, se conserva al reemplazar. */
+  visit: number;
   navigate: (r: Route) => void;
+  /** Actualiza la ruta actual sin crear una entrada nueva (Volver conserva el estado). */
+  replace: (r: Route) => void;
   back: () => void;
   canGoBack: boolean;
   online: boolean;
@@ -135,7 +141,9 @@ export function AppProvider({
       return EMPTY;
     }
   });
-  const [stack, setStack] = useState<Route[]>([initialRoute]);
+  const [stack, setStack] = useState<{ route: Route; visit: number }[]>([
+    { route: initialRoute, visit: 0 },
+  ]);
   const [online, setOnline] = useState(() =>
     typeof navigator === "undefined" ? true : navigator.onLine,
   );
@@ -163,12 +171,21 @@ export function AppProvider({
     };
   }, []);
 
-  const route = stack[stack.length - 1] ?? initialRoute;
+  const top = stack[stack.length - 1] ?? { route: initialRoute, visit: 0 };
 
+  const visits = useRef(0);
   const navigate = useCallback((r: Route) => {
-    setStack((s) => [...s.slice(-30), r]);
+    visits.current += 1;
+    const visit = visits.current;
+    setStack((s) => [...s.slice(-30), { route: r, visit }]);
     if (r.name === "ficha") dispatch({ type: "work", patch: { lastExperience: r.code } });
     window.scrollTo({ top: 0 });
+  }, []);
+  const replace = useCallback((r: Route) => {
+    setStack((s) => {
+      const last = s.at(-1);
+      return last ? [...s.slice(0, -1), { route: r, visit: last.visit }] : [{ route: r, visit: 0 }];
+    });
   }, []);
   const back = useCallback(() => {
     setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
@@ -185,8 +202,10 @@ export function AppProvider({
     repo,
     search,
     services,
-    route,
+    route: top.route,
+    visit: top.visit,
     navigate,
+    replace,
     back,
     canGoBack: stack.length > 1,
     online,
@@ -200,5 +219,8 @@ export function useApp(): AppApi {
   if (!v) throw new Error("useApp fuera de AppProvider");
   return v;
 }
+
+/** Marca de tiempo (fuera del render: se usa en manejadores de eventos). */
+export const now = () => Date.now();
 
 export const newId = () => `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

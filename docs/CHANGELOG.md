@@ -1,5 +1,14 @@
 # CHANGELOG — Happy Time
 
+## [F2] 2026-10-16 — Sistema de diseño y prototipo navegable
+### Agregado
+- Tokens de diseño claro/oscuro con prueba de contraste AA; CSS móvil primero con objetivos de 44 px.
+- Avatar de Happy (provisional) con 5 estados × 5 tamaños y lockup; hoja de identidad.
+- Pantallas: ingreso con código, elección de niveles, Inicio, Malla con reloj de periodos, ficha completa con procedencia, búsqueda con resaltado, perfil de nivel, progresión, principios, Happy, Guardados y perfil.
+- Contrato de Happy (`HappyResponseSchema` + validador) y detector preliminar de privacidad.
+- Happy simulada que cita la malla por `unitId`; estados del avatar ligados a eventos reales.
+- Prototipo empaquetado en un solo HTML; 28 pruebas e2e (Playwright + axe) en CI; 138 pruebas unitarias.
+
 ## [F1] 2026-10-16 — Compilador curricular
 ### Agregado
 - Repositorio `happy-time-plataforma` con TypeScript estricto, ESLint, Prettier, Vitest y CI en GitHub Actions.

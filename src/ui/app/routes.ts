@@ -4,8 +4,13 @@
  */
 import { useCallback, useMemo, useRef, useState } from "react";
 import { LEVEL_IDS, type LevelId } from "../../domain/curriculum/fields";
-import { ModeSchema } from "../../domain/happy/schema";
-import { codeToSlug, slugToCode } from "../../domain/curriculum/views";
+import { isMode } from "../../domain/happy/modes";
+import {
+  catalogExperience,
+  codeToSlug,
+  slugToCode,
+  type Catalog,
+} from "../../domain/curriculum/views";
 import type { Route } from "./types";
 
 export interface Navigation {
@@ -52,6 +57,40 @@ export function routeToHref(r: Route): string {
       return "/identidad";
     case "tools":
       return "/perfil";
+    case "notFound":
+      return "/";
+  }
+}
+
+/**
+ * Pantalla "padre" de una ruta: adónde lleva «Volver» cuando no hay historial dentro de la app
+ * (enlace abierto en una pestaña nueva). Nunca saca a la docente de la app.
+ */
+export function parentRoute(r: Route, catalog: Catalog): Route {
+  switch (r.name) {
+    case "ficha": {
+      const e = catalogExperience(catalog, r.code);
+      return e
+        ? { name: "malla", levelId: e.levelId, periodIndex: e.periodIndex }
+        : { name: "malla" };
+    }
+    case "level":
+    case "progression":
+    case "principles":
+      return { name: "malla" };
+    case "identity":
+      return { name: "tools" };
+    case "malla":
+      return { name: "malla" };
+    case "happy":
+      return { name: "happy" };
+    case "saved":
+      return { name: "saved" };
+    case "home":
+    case "search":
+    case "tools":
+    case "notFound":
+      return { name: "home" };
   }
 }
 
@@ -61,7 +100,8 @@ const isLevel = (v: string | null): v is LevelId =>
 export function hrefToRoute(pathname: string, params: URLSearchParams): Route {
   const parts = pathname.replace(/\/+$/, "").split("/").filter(Boolean);
   const [a, b] = parts;
-  const period = Number(params.get("periodo"));
+  const p = params.get("periodo") ?? "";
+  const period = /^[1-4]$/.test(p) ? Number(p) : undefined;
   switch (a) {
     case undefined:
       return { name: "home" };
@@ -70,23 +110,23 @@ export function hrefToRoute(pathname: string, params: URLSearchParams): Route {
       return {
         name: "malla",
         ...(isLevel(params.get("nivel")) ? { levelId: params.get("nivel") as LevelId } : {}),
-        ...(period >= 1 && period <= 4 ? { periodIndex: period } : {}),
+        ...(period ? { periodIndex: period } : {}),
       };
     case "buscar":
       return { name: "search", ...(params.get("q") ? { q: params.get("q") ?? "" } : {}) };
     case "niveles":
-      return isLevel(b ?? null) ? { name: "level", levelId: b as LevelId } : { name: "home" };
+      return isLevel(b ?? null) ? { name: "level", levelId: b as LevelId } : { name: "notFound" };
     case "progresion":
       return { name: "progression" };
     case "principios":
       return { name: "principles" };
     case "happy": {
-      const mode = ModeSchema.safeParse(params.get("modo"));
+      const mode = params.get("modo");
       const exp = params.get("experiencia");
       return {
         name: "happy",
         ...(params.get("hilo") ? { threadId: params.get("hilo") ?? "" } : {}),
-        ...(mode.success ? { mode: mode.data } : {}),
+        ...(isMode(mode) ? { mode } : {}),
         ...(exp ? { context: { experienceCode: exp } } : {}),
       };
     }
@@ -104,7 +144,7 @@ export function hrefToRoute(pathname: string, params: URLSearchParams): Route {
     case "perfil":
       return { name: "tools" };
     default:
-      return { name: "home" };
+      return { name: "notFound" };
   }
 }
 

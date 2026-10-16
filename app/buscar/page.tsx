@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SearchPage } from "../_client/screens";
+import { SearchPage } from "../_client/search";
 
 export const metadata: Metadata = { title: "Buscar" };
 

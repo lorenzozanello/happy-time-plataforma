@@ -9,10 +9,10 @@ import {
   type ReactNode,
 } from "react";
 import type { CurriculumRepository } from "../../domain/curriculum/repository";
-import type { Catalog, SearchBundle } from "../../domain/curriculum/views";
+import { catalogExperience, type Catalog, type SearchBundle } from "../../domain/curriculum/views";
+import { EMPTY, sanitizeStored, type AppState, type ResponseCheck } from "./persisted";
 import type { Navigation } from "./routes";
 import type {
-  Favorite,
   FavoriteTarget,
   Route,
   SavedIdea,
@@ -22,23 +22,7 @@ import type {
   WorkContext,
 } from "./types";
 
-export interface AppState {
-  session: Session | null;
-  work: WorkContext;
-  favorites: Favorite[];
-  ideas: SavedIdea[];
-  recentSearches: string[];
-  threads: Thread[];
-}
-
-const EMPTY: AppState = {
-  session: null,
-  work: { levelIds: [], onboarded: false },
-  favorites: [],
-  ideas: [],
-  recentSearches: [],
-  threads: [],
-};
+export type { AppState };
 
 type Action =
   | { type: "signIn"; session: Session }
@@ -155,6 +139,7 @@ export function AppProvider({
   navigation,
   storageKey = "ht.prototipo.v1",
   happyEnabled = true,
+  checkResponse,
   children,
 }: {
   catalog: Catalog;
@@ -165,6 +150,8 @@ export function AppProvider({
   /** Clave del almacenamiento del navegador (el prototipo y la app no comparten datos). */
   storageKey?: string;
   happyEnabled?: boolean;
+  /** Valida respuestas de Happy guardadas (sin él, los hilos guardados se descartan). */
+  checkResponse?: ResponseCheck;
   children: ReactNode;
 }) {
   const [root, dispatch] = useReducer(rootReducer, { app: EMPTY, hydrated: false });
@@ -175,12 +162,20 @@ export function AppProvider({
     () => true,
   );
 
-  // El almacenamiento se lee después de montar: el HTML del servidor y el primer render coinciden.
+  // El almacenamiento se lee una sola vez, después de montar: el HTML del servidor y el primer
+  // render coinciden. Se valida con el catálogo y el validador del montaje (no se re-hidrata
+  // si cambian de identidad).
+  const deps = useRef({ catalog, checkResponse });
   useEffect(() => {
     let stored: AppState | undefined;
     try {
       const raw = services.storage.get(storageKey);
-      if (raw) stored = { ...EMPTY, ...(JSON.parse(raw) as Partial<AppState>) };
+      if (raw)
+        stored = sanitizeStored(
+          JSON.parse(raw) as unknown,
+          deps.current.catalog,
+          deps.current.checkResponse,
+        );
     } catch {
       /* almacenamiento ilegible: se empieza vacío */
     }
@@ -199,11 +194,16 @@ export function AppProvider({
   const lastFicha = useRef<string | null>(null);
   useEffect(() => {
     const r = navigation.route;
-    if (r.name === "ficha" && r.code !== lastFicha.current && hydrated) {
+    if (
+      r.name === "ficha" &&
+      r.code !== lastFicha.current &&
+      hydrated &&
+      catalogExperience(catalog, r.code)
+    ) {
       lastFicha.current = r.code;
       dispatch({ type: "work", patch: { lastExperience: r.code } });
     }
-  }, [navigation.route, hydrated]);
+  }, [navigation.route, hydrated, catalog]);
 
   const favSet = useMemo(
     () => new Set(state.favorites.map((f) => favoriteKey(f.target))),

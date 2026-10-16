@@ -12,7 +12,8 @@ import {
   slugToCode,
   unitExperienceCode,
 } from "../../src/domain/curriculum/views";
-import { hrefToRoute, routeToHref } from "../../src/ui/app/routes";
+import { sanitizeStored } from "../../src/ui/app/persisted";
+import { hrefToRoute, parentRoute, routeToHref } from "../../src/ui/app/routes";
 import type { Route } from "../../src/ui/app/types";
 import { release } from "../helpers";
 
@@ -107,6 +108,92 @@ describe("F3-02 · rutas ↔ URLs", () => {
     expect(hrefToRoute("/malla", p("nivel=primaria&periodo=9"))).toEqual({ name: "malla" });
     expect(hrefToRoute("/guardados", p("pestana=otra"))).toEqual({ name: "saved" });
     expect(hrefToRoute("/happy", p("modo=borrar"))).toEqual({ name: "happy" });
-    expect(hrefToRoute("/niveles/primaria", p(""))).toEqual({ name: "home" });
+    expect(hrefToRoute("/malla", p("periodo=2.5"))).toEqual({ name: "malla" });
+    expect(hrefToRoute("/malla", p("periodo=02"))).toEqual({ name: "malla" });
+    expect(hrefToRoute("/niveles/primaria", p(""))).toEqual({ name: "notFound" });
+    expect(hrefToRoute("/no-existe", p(""))).toEqual({ name: "notFound" });
+  });
+});
+
+describe("F3 · «Volver» sin historial lleva a la pantalla padre", () => {
+  it("la ficha vuelve a su nivel y periodo en la malla", () => {
+    expect(parentRoute({ name: "ficha", code: "S2.3" }, catalog)).toEqual({
+      name: "malla",
+      levelId: "step-2",
+      periodIndex: 3,
+    });
+    expect(parentRoute({ name: "ficha", code: "ZZ.9" }, catalog)).toEqual({ name: "malla" });
+    expect(parentRoute({ name: "identity" }, catalog)).toEqual({ name: "tools" });
+    expect(parentRoute({ name: "notFound" }, catalog)).toEqual({ name: "home" });
+  });
+});
+
+describe("F3 · datos del navegador no confiables", () => {
+  it("descarta lo inválido sin perder lo válido", () => {
+    const s = sanitizeStored(
+      {
+        session: { email: "a@b.co", role: "rector" },
+        work: {
+          levelIds: ["step-2", "primaria", "step-2", 7],
+          periodIndex: 9,
+          lastExperience: "ZZ.9",
+          onboarded: true,
+        },
+        favorites: [
+          {
+            id: "1",
+            target: { type: "experience", code: "S2.1" },
+            release: "2026-06",
+            createdAt: 1,
+          },
+          { id: "2", target: { type: "otro" }, release: "2026-06", createdAt: 1 },
+          null,
+        ],
+        ideas: "no es una lista",
+        recentSearches: ["rimas", "", 42, "x".repeat(500)],
+        threads: [{ id: "t", mode: "explorar", title: "x", updatedAt: 1, messages: [] }],
+      },
+      catalog,
+    );
+    expect(s.session).toBeNull();
+    expect(s.work).toEqual({ levelIds: ["step-2"], onboarded: true });
+    expect(s.favorites.map((f) => f.id)).toEqual(["1"]);
+    expect(s.ideas).toEqual([]);
+    expect(s.recentSearches).toEqual(["rimas"]);
+    expect(s.threads).toEqual([]); // sin validador de respuestas (app sin Happy) no se cargan hilos
+  });
+
+  it("cualquier valor raro produce un estado vacío utilizable", () => {
+    for (const raw of [null, 3, "x", [], { work: null, favorites: null }]) {
+      const s = sanitizeStored(raw, catalog);
+      expect(s.work.levelIds).toEqual([]);
+      expect(s.favorites).toEqual([]);
+    }
+  });
+
+  it("con validador conserva hilos válidos y descarta respuestas inválidas", () => {
+    const s = sanitizeStored(
+      {
+        threads: [
+          {
+            id: "t",
+            mode: "explorar",
+            title: "x",
+            updatedAt: 1,
+            context: { levelId: "primaria", experienceCode: "S2.1", periodIndex: 2 },
+            messages: [
+              { id: "m1", role: "docente", text: "hola", createdAt: 1 },
+              { id: "m2", role: "happy", response: { malo: true }, createdAt: 2 },
+            ],
+          },
+          { id: "u", mode: "borrar", title: "x", updatedAt: 1, messages: [] },
+        ],
+      },
+      catalog,
+      (v) => typeof v === "object" && v !== null && !("malo" in v),
+    );
+    expect(s.threads).toHaveLength(1);
+    expect(s.threads[0]?.context).toEqual({ experienceCode: "S2.1", periodIndex: 2 });
+    expect(s.threads[0]?.messages.map((m) => m.id)).toEqual(["m1"]);
   });
 });

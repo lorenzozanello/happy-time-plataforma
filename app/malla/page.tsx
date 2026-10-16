@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { MallaPage } from "../_client/screens";
+import { MallaPage } from "../_client/malla";
 
 export const metadata: Metadata = { title: "Malla" };
 

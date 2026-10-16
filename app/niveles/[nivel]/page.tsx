@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { buildLevel } from "../../../src/domain/curriculum/views";
-import { LevelPage } from "../../_client/screens";
+import { LevelPage } from "../../_client/reference";
 import { getCatalog, getRepository } from "../../_server/curriculum";
 
 type Props = { params: Promise<{ nivel: string }> };

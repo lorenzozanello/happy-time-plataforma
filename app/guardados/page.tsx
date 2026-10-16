@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SavedPage } from "../_client/screens";
+import { SavedPage } from "../_client/saved";
 
 export const metadata: Metadata = { title: "Guardados" };
 

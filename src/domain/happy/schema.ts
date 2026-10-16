@@ -5,17 +5,10 @@
  */
 import { z } from "zod";
 import { findCopiedSequence } from "../curriculum/fingerprint";
+import { MODES, type Mode } from "./modes";
 
-export const ModeSchema = z.enum([
-  "explorar",
-  "aterrizar",
-  "conectar",
-  "adaptar",
-  "observar",
-  "registrar",
-  "general",
-]);
-export type Mode = z.infer<typeof ModeSchema>;
+export const ModeSchema = z.enum(MODES);
+export type { Mode };
 
 /** Modos disponibles en la v1 (los demás llegan en F6). */
 export const V1_MODES = [

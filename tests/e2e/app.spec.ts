@@ -64,9 +64,102 @@ test.describe("F3-02 · URLs compartibles", () => {
       const res = await page.goto(path);
       expect(res?.status(), path).toBe(404);
       await expect(page.getByRole("heading", { name: "No encontramos esta página" })).toBeVisible();
+      await expect(page.locator(".tabbar [aria-current]")).toHaveCount(0);
     }
     await page.getByRole("link", { name: "Ir a la malla" }).click();
     await expect(page).toHaveURL(/\/malla$/);
+  });
+});
+
+test.describe("Revisión adversarial F3 · navegación", () => {
+  test("«Volver» en un enlace abierto directamente lleva a la malla, no fuera de la app", async ({
+    page,
+  }) => {
+    await page.goto("/malla/s2-1");
+    await page.locator(".ficha__next").click();
+    await expect(page).toHaveURL(/\/malla\/s2-2$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/malla\/s2-1$/);
+    await page.getByRole("button", { name: "Volver" }).click();
+    await expect(page).toHaveURL(/\/malla\?nivel=step-2&periodo=1$/);
+    await expect(page.locator(".exp-card--hero")).toContainText(unit("S2.1#titulo").text);
+  });
+
+  test("«Volver» tras navegar dentro de la app usa el historial", async ({ page }) => {
+    await page.goto("/buscar?q=rimas");
+    await page.locator(".result").first().click();
+    await expect(page.locator(".ficha")).toBeVisible();
+    await page.getByRole("button", { name: "Volver" }).click();
+    await expect(page).toHaveURL(/\/buscar\?q=rimas$/);
+    await expect(page.getByLabel("Buscar en la malla")).toHaveValue("rimas");
+  });
+
+  test("la pantalla de la malla sigue a la URL (pestaña, atrás y adelante)", async ({ page }) => {
+    await page.goto("/malla?nivel=transicion&periodo=3");
+    await expect(page.locator(".exp-card--hero")).toContainText(unit("T.3#titulo").text);
+    await tab(page, "Malla").click();
+    await expect(page).toHaveURL(/\/malla$/);
+    await expect(page.locator(".exp-card--hero")).toContainText(unit("S1.1#titulo").text);
+    await page.getByRole("button", { name: /Step 2/ }).click();
+    await expect(page).toHaveURL(/\/malla\?nivel=step-2&periodo=1$/);
+    await expect(page.getByRole("button", { name: /Step 2/ })).toBeFocused();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/malla\?nivel=transicion&periodo=3$/);
+    await expect(page.locator(".exp-card--hero")).toContainText(unit("T.3#titulo").text);
+    await page.goForward();
+    await expect(page).toHaveURL(/\/malla\?nivel=step-2&periodo=1$/);
+    await expect(page.locator(".exp-card--hero")).toContainText(unit("S2.1#titulo").text);
+  });
+
+  test("la búsqueda sigue a la URL y escribir no la reinicia", async ({ page }) => {
+    await page.goto("/buscar?q=rimas");
+    await expect(page.getByLabel("Buscar en la malla")).toHaveValue("rimas");
+    await page.locator(".topbar").getByRole("link", { name: "Abrir búsqueda" }).click();
+    await expect(page).toHaveURL(/\/buscar$/);
+    await expect(page.getByLabel("Buscar en la malla")).toHaveValue("");
+    await page.getByLabel("Buscar en la malla").pressSequentially("vinculo seguro", { delay: 5 });
+    await expect(page.getByLabel("Buscar en la malla")).toHaveValue("vinculo seguro");
+    await expect(page).toHaveURL(/\/buscar\?q=vinculo\+seguro$/);
+    await page.goBack();
+    await expect(page).toHaveURL(/\/buscar\?q=rimas$/);
+    await expect(page.getByLabel("Buscar en la malla")).toHaveValue("rimas");
+  });
+
+  test("URL y datos guardados inválidos no tumban la app", async ({ page }) => {
+    const errors: string[] = [];
+    page.on("pageerror", (e) => errors.push(e.message));
+    await page.goto("/malla?periodo=2.5&nivel=primaria");
+    await expect(page.locator(".exp-card--hero")).toBeVisible();
+    await page.evaluate(() => {
+      localStorage.setItem(
+        "ht.app.v1",
+        JSON.stringify({
+          work: { levelIds: ["primaria", "kinder"], periodIndex: 9, lastExperience: "ZZ.9" },
+          favorites: null,
+          recentSearches: [3],
+        }),
+      );
+    });
+    for (const path of ["/", "/malla", "/guardados", "/perfil"]) {
+      await page.goto(path);
+      await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+    }
+    await page.goto("/malla");
+    await expect(page.locator(".exp-card--hero")).toContainText(unit("K.1#titulo").text);
+    expect(errors).toEqual([]);
+  });
+
+  test("una ficha inexistente no borra «Continuar donde quedaste»", async ({ page }) => {
+    await page.goto("/malla/s2-1");
+    await expect
+      .poll(() => page.evaluate(() => localStorage.getItem("ht.app.v1") ?? ""))
+      .toContain('"lastExperience":"S2.1"');
+    await page.goto("/malla/zz-9");
+    await expect(page.getByRole("heading", { name: "No encontramos esta página" })).toBeVisible();
+    await page.goto("/");
+    await expect(page.getByRole("region", { name: "Continuar donde quedaste" })).toContainText(
+      unit("S2.1#titulo").text,
+    );
   });
 });
 
@@ -80,6 +173,15 @@ test.describe("F3-03 · Fichas estáticas", () => {
     );
     const next = page.locator(".ficha__next");
     await expect(next).toHaveAttribute("href", "/malla/s2-2");
+  });
+
+  test("sin JavaScript, la malla no muestra una experiencia que no es la pedida", async ({
+    page,
+  }) => {
+    await page.goto("/malla?nivel=kinder&periodo=2");
+    await expect(page.getByRole("heading", { level: 1, name: "Malla curricular" })).toBeVisible();
+    await expect(page.locator(".exp-card--hero")).toHaveCount(0);
+    await expect(page.getByRole("link", { name: "Abrir ficha" })).toHaveCount(0);
   });
 });
 
@@ -256,32 +358,50 @@ test.describe("F3-08 · Seguridad básica", () => {
 });
 
 test.describe("F3-07 · Rendimiento", () => {
-  test("LCP de la ficha ≤ 2,0 s con 4G lenta simulada y CPU ×4", async ({ page }, info) => {
-    test.skip(info.project.name !== "app-movil-360", "medición en móvil");
+  /**
+   * Laboratorio: perfil móvil de Lighthouse aplicado por petición (equivalente DevTools de
+   * "Slow 4G": 562,5 ms de latencia, 1,47 Mbps de bajada) y CPU ×4, sin caché. El LCP se lee
+   * cuando la página ya está quieta (red inactiva y 1 s sin cambios), no en el evento load.
+   */
+  async function measureLcp(page: Page, path: string): Promise<number> {
     const cdp = await page.context().newCDPSession(page);
     await cdp.send("Network.enable");
     await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
-    // Perfil móvil de Lighthouse ("Slow 4G"): 150 ms RTT, 1,6 Mbps de bajada, 750 kbps de subida.
     await cdp.send("Network.emulateNetworkConditions", {
       offline: false,
-      latency: 150,
-      downloadThroughput: (1.6 * 1024 * 1024) / 8,
-      uploadThroughput: (750 * 1024) / 8,
+      latency: 562.5,
+      downloadThroughput: (1.4746 * 1024 * 1024) / 8,
+      uploadThroughput: (675 * 1024) / 8,
     });
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
-    await page.goto("/malla/s2-1", { waitUntil: "load" });
-    const lcp = await page.evaluate(
+    await page.goto(path, { waitUntil: "networkidle", timeout: 60_000 });
+    await page.waitForTimeout(1000);
+    return page.evaluate(
       () =>
         new Promise<number>((resolve) => {
           new PerformanceObserver((list) => {
             const entries = list.getEntries();
-            const last = entries[entries.length - 1];
-            if (last) resolve(last.startTime);
+            resolve(entries[entries.length - 1]?.startTime ?? Number.POSITIVE_INFINITY);
           }).observe({ type: "largest-contentful-paint", buffered: true });
         }),
     );
-    console.log(`LCP /malla/s2-1: ${String(Math.round(lcp))} ms`);
-    test.info().annotations.push({ type: "LCP (ms)", description: String(Math.round(lcp)) });
-    expect(lcp).toBeLessThanOrEqual(2000);
-  });
+  }
+
+  for (const [path, budget] of [
+    ["/malla/s2-1", 2000],
+    // La malla depende de la URL y de los datos del navegador: muestra esqueleto hasta conocerlos
+    // y su contenido llega con el JavaScript. Guardia de regresión, no objetivo (ver F3-07).
+    ["/malla?nivel=step-2&periodo=3", 4000],
+  ] as const) {
+    test(`LCP de ${path} ≤ ${String(budget / 1000).replace(".", ",")} s`, async ({
+      page,
+    }, info) => {
+      test.skip(info.project.name !== "app-movil-360", "medición en móvil");
+      test.setTimeout(90_000);
+      const lcp = await measureLcp(page, path);
+      console.log(`LCP ${path}: ${String(Math.round(lcp))} ms`);
+      info.annotations.push({ type: `LCP ${path} (ms)`, description: String(Math.round(lcp)) });
+      expect(lcp).toBeLessThanOrEqual(budget);
+    });
+  }
 });

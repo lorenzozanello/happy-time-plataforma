@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../app/state";
-import { Button, Icon, RouteLink } from "../components";
+import { Button, Icon, RouteLink, Skeleton } from "../components";
 import {
   HAPPY_SIZES,
   HAPPY_STATES,
@@ -12,7 +12,7 @@ import { PALETTE } from "../theme";
 import { LevelsSetup } from "./Access";
 
 export function ProfileScreen() {
-  const { state, dispatch, services, catalog } = useApp();
+  const { state, dispatch, services, catalog, hydrated } = useApp();
   const [saved, setSaved] = useState(false);
   const [failOn, setFailOn] = useState(() => services.prototype?.getFailHappy() ?? false);
   const releaseLine = (
@@ -28,11 +28,15 @@ export function ProfileScreen() {
         {state.session && <p className="lead">{state.session.email}</p>}
       </header>
 
-      <LevelsSetup
-        onDone={() => {
-          setSaved(true);
-        }}
-      />
+      {hydrated ? (
+        <LevelsSetup
+          onDone={() => {
+            setSaved(true);
+          }}
+        />
+      ) : (
+        <Skeleton lines={3} />
+      )}
       {saved && (
         <p className="ok" role="status">
           <Icon name="check" size={18} /> Guardado

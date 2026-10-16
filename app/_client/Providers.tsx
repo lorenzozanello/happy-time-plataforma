@@ -1,7 +1,7 @@
 "use client";
 import { useMemo, type ReactNode } from "react";
 import type { Catalog, SearchBundle } from "../../src/domain/curriculum/views";
-import { Shell } from "../../src/ui/App";
+import { Shell } from "../../src/ui/Shell";
 import { AppProvider } from "../../src/ui/app/state";
 import { useNextNavigation } from "./navigation";
 import { createAppServices } from "./services";
@@ -18,7 +18,7 @@ export function Providers({
   searchUrl: string;
   children: ReactNode;
 }) {
-  const navigation = useNextNavigation();
+  const navigation = useNextNavigation(catalog);
   const services = useMemo(() => createAppServices(), []);
   const loadSearch = useMemo(() => {
     let pending: Promise<SearchBundle> | undefined;

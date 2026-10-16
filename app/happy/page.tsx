@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { HappyPage } from "../_client/screens";
+import { HappyPage } from "../_client/happy";
 
 export const metadata: Metadata = { title: "Happy" };
 

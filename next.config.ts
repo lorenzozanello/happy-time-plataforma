@@ -38,6 +38,8 @@ export const SECURITY_HEADERS = [
 const config: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // `next dev` no debe reescribir CLAUDE.md ni crear AGENTS.md (las reglas del repo son nuestras).
+  agentRules: false,
   headers() {
     return Promise.resolve([{ source: "/:path*", headers: SECURITY_HEADERS }]);
   },

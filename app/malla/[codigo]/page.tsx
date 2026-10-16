@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { buildFicha, codeToSlug, slugToCode } from "../../../src/domain/curriculum/views";
-import { FichaPage } from "../../_client/screens";
+import { FichaPage } from "../../_client/ficha";
 import { getCatalog, getRepository } from "../../_server/curriculum";
 
 type Props = { params: Promise<{ codigo: string }> };

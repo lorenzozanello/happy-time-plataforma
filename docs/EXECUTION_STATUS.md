@@ -1,7 +1,7 @@
 # EXECUTION_STATUS — Happy Time
 
 **Última actualización:** 2026-10-16
-**Fase actual:** F3 — Malla en producción (en curso) · F2 pendiente solo de revisión humana
+**Fase actual:** F3 — Malla en producción (lista en el PR #3; falta solo el despliegue, OD-1) · F2 pendiente solo de revisión humana
 **Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe`
 
 | Fase | Estado | Evidencia / bloqueo |
@@ -9,7 +9,7 @@
 | F0 Baseline | ✅ Aprobado por el owner (2026-10-16, “Procede”) | `docs/ARCHITECTURE_BASELINE_v1.md` |
 | F1 Compilador curricular | ✅ Fusionado (PR #1) · ⏳ OD-5 para cierre formal | PR #1, CI verde |
 | F2 Diseño y prototipo | ✅ Fusionado (PR #2) · ⏳ revisión humana (F2-09) | Reloj provisional hasta OD-6 |
-| F3 Malla en producción | 🔄 En curso | Despliegue requiere OD-1 (Vercel) |
+| F3 Malla en producción | ✅ F3-01…F3-08 en el PR #3 · ⏳ F3-09 despliegue (OD-1) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
 | F4 Acceso y Guardados | ⏸ | OD-1, OD-3 |
 | F5 Happy núcleo | ⏸ | OD-2 |
 | F6 Happy extendida | ⏸ | OD-4 |
@@ -107,6 +107,24 @@ Revisión adversarial independiente de F2 (corregida en el mismo PR): **alto** �
 | F3-08 | Seguridad básica | Cabeceras CSP, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`, `noindex`; tipografías alojadas en la app; sin secretos |
 | F3-09 | Despliegue | Vista previa en Vercel por PR — **requiere OD-1** |
 
+### Resultado F3 (2026-10-16)
+
+| ID | Resultado | Evidencia |
+|---|---|---|
+| F3-01 | ✅ | `app/` (Next.js 16.3.8) usa las pantallas de `src/ui` sin duplicarlas; el prototipo sigue pasando sus 35 e2e. Job de CI «App de producción» |
+| F3-02 | ✅ | Todas las URLs, con ida y vuelta probada (`views-routes.test.ts`) y en e2e: enlace compartido de la malla, atrás/adelante, «Volver» sin historial, 404 con estado HTTP 404 |
+| F3-03 | ✅ | 20 fichas y 5 niveles pre-generados (la ficha se lee sin JavaScript). `app:check-bundle`: 0 secuencias curriculares en los 22 archivos JS del cliente; cada HTML/RSC lleva solo sus unidades + el catálogo. Probado con mutaciones (malla importada en el cliente, unidades de otras fichas en el payload, unidad corta en un chunk) |
+| F3-04 | ✅ | `/datos/busqueda-2026-06.json` (estático, inmutable) solo se pide en `/buscar`; el paquete serializado da los mismos resultados que el índice del dominio (prueba unitaria); error con reintento en e2e |
+| F3-05 | ✅ | Barrido e2e de las 20 fichas en la app: 480 unidades con su literal exacto |
+| F3-06 | ✅ | axe sin violaciones serias en 11 vistas × claro/oscuro × 360 px/escritorio; sin scroll horizontal; objetivos ≥44 px; foco al título tras navegar; `aria-current` correcto |
+| F3-07 | ✅ | LCP de la ficha **1,6 s** (perfil Lighthouse móvil aplicado por petición: 562,5 ms, 1,47 Mbps, CPU ×4). `/malla`: 2,9 s (esqueleto hasta leer URL y datos del navegador; guardia de regresión en 4 s) |
+| F3-08 | ✅ | CSP sin orígenes externos, `nosniff`, `Referrer-Policy`, `frame-ancestors 'none'`, HSTS, COOP, `noindex` (cabecera y meta), verificados en e2e; ninguna petición a terceros; tipografías en la app; sin secretos |
+| F3-09 | ⏳ | **Requiere OD-1** (cuenta de Vercel del owner). La app está lista: `next build` + `next start`, sin variables de entorno |
+
+Revisión adversarial independiente de F3 (corregida en el mismo PR): **medio-alto** — «Volver» podía sacar a la docente de la app; **medio** — la malla y la búsqueda se desincronizaban de la URL; una URL o datos guardados inválidos tumbaban la app (y el error salía en inglés); la malla mostraba una experiencia equivocada antes de hidratar; la comprobación del bundle tenía falsos negativos (saltos de línea escapados, payloads RSC); **bajo** — LCP medido demasiado pronto, todo el JavaScript en cada página, índice re-parseado, ficha 404 borraba «Continuar», foco en StrictMode, `aria-current` en 404, `next dev` reescribía `CLAUDE.md` (`agentRules: false`).
+
+Limitaciones conocidas: `/malla` depende del JavaScript para mostrar la experiencia (2,9 s en el perfil lento; mejora posible pre-generando por nivel en F7). `next start` no comprime el JSON de búsqueda (407 KB; ~68 KB con gzip): Vercel lo comprime en el borde; en autoalojamiento debe hacerlo el proxy. En `next start`, cada 404 de ruta dinámica deja un `NoFallbackError` en el registro del servidor (comportamiento de Next, sin efecto para la docente).
+
 ## Decisiones abiertas del owner
 OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
 OD-7 resuelta: repositorio `lorenzozanello/happy-time-plataforma`.
@@ -114,4 +132,6 @@ Recomendado: activar protección de `main` (PR obligatorio + CI verde + code own
 Pendiente H-01: confirmación del hash contra un registro externo al ZIP.
 
 ## Próximo paso
-F3 en curso en la rama `f3-malla-produccion`. En paralelo: owner + 2–3 docentes recorren el prototipo (cierra F2).
+1. Owner: conectar el repositorio a Vercel (OD-1) para la vista previa por PR (cierra F3-09).
+2. Owner + 2–3 docentes: recorrer el prototipo o la vista previa en móvil (cierra F2-09).
+3. F4 (acceso y Guardados en servidor) espera OD-1 y OD-3.

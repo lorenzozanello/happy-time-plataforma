@@ -2,7 +2,7 @@ import { useRef, useState } from "react";
 import type { LevelId } from "../../domain/curriculum/fields";
 import { catalogLevel, experienceAt, experiencesOfLevel } from "../../domain/curriculum/views";
 import { useApp } from "../app/state";
-import { Icon, Literal, PeriodChip, RouteLink } from "../components";
+import { Icon, Literal, PeriodChip, RouteLink, Skeleton } from "../components";
 import { ROMAN } from "../presentation";
 
 /** Selector de periodo con forma de reloj: los cuatro periodos del año como cuatro cuartos. */
@@ -90,14 +90,18 @@ export function LevelPicker({
   );
 }
 
-export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; periodIndex?: number }) {
-  const { catalog, state, replace, happyEnabled } = useApp();
-  const [level, setLevel] = useState<LevelId>(levelId ?? state.work.levelIds[0] ?? "step-1");
-  const [period, setPeriod] = useState<number>(periodIndex ?? state.work.periodIndex ?? 1);
-  const exps = experiencesOfLevel(catalog, level);
-  const exp = experienceAt(catalog, level, period);
-  const levelLabel = catalogLevel(catalog, level)?.labelLiteral ?? level;
+interface MallaProps {
+  levelId?: LevelId;
+  periodIndex?: number;
+}
 
+/**
+ * La experiencia que se muestra depende de la URL y de los niveles guardados en el navegador:
+ * hasta conocerlos (HTML estático, antes de leer el almacenamiento) se muestra un esqueleto,
+ * nunca una experiencia que no es (revisión adversarial F3).
+ */
+export function MallaScreen(props: MallaProps) {
+  const { hydrated } = useApp();
   return (
     <div className="screen">
       <header className="screen__head">
@@ -107,7 +111,29 @@ export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; perio
           <span>Buscar en la malla</span>
         </RouteLink>
       </header>
+      {hydrated ? (
+        <MallaBody {...props} />
+      ) : (
+        <div className="stack" aria-busy="true" aria-label="Cargando la malla">
+          <Skeleton lines={2} />
+          <Skeleton lines={4} />
+        </div>
+      )}
+    </div>
+  );
+}
 
+function MallaBody({ levelId, periodIndex }: MallaProps) {
+  const { catalog, state, replace, happyEnabled } = useApp();
+  const stored = state.work.levelIds[0];
+  const [level, setLevel] = useState<LevelId>(levelId ?? stored ?? "step-1");
+  const [period, setPeriod] = useState<number>(periodIndex ?? state.work.periodIndex ?? 1);
+  const exps = experiencesOfLevel(catalog, level);
+  const exp = experienceAt(catalog, level, period);
+  const levelLabel = catalogLevel(catalog, level)?.labelLiteral ?? level;
+
+  return (
+    <>
       <LevelPicker
         value={level}
         onChange={(l) => {
@@ -189,6 +215,6 @@ export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; perio
           <Icon name="chevron" size={18} />
         </RouteLink>
       </nav>
-    </div>
+    </>
   );
 }

@@ -10,7 +10,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export function SavedScreen({ tab = "favoritos" }: { tab?: Tab }) {
-  const { state, catalog, navigate, replace, dispatch } = useApp();
+  const { state, catalog, navigate, replace, dispatch, happyEnabled } = useApp();
   const select = (t: Tab) => {
     replace({ name: "saved", tab: t });
   };
@@ -108,17 +108,23 @@ export function SavedScreen({ tab = "favoritos" }: { tab?: Tab }) {
           (state.ideas.length === 0 ? (
             <EmptyState
               title="Aún no tienes ideas guardadas"
-              body="Cuando Happy te proponga un camino que te sirva, toca «Guardar idea»."
-              action={
-                <Button
-                  variant="primary"
-                  onClick={() => {
-                    navigate({ name: "happy", mode: "explorar" });
-                  }}
-                >
-                  Pedir ideas a Happy
-                </Button>
+              body={
+                happyEnabled
+                  ? "Cuando Happy te proponga un camino que te sirva, toca «Guardar idea»."
+                  : "Cuando Happy llegue, podrás guardar aquí los caminos que te sirvan."
               }
+              {...(happyEnabled
+                ? {
+                    action: (
+                      <RouteLink
+                        to={{ name: "happy", mode: "explorar" }}
+                        className="btn btn--primary"
+                      >
+                        Pedir ideas a Happy
+                      </RouteLink>
+                    ),
+                  }
+                : {})}
             />
           ) : (
             <ul className="card-list">

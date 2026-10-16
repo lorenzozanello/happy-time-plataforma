@@ -17,7 +17,8 @@ export default defineConfig({
   webServer: {
     command: `npx next start -p ${String(PORT)} -H 127.0.0.1`,
     url: `http://127.0.0.1:${String(PORT)}/`,
-    reuseExistingServer: !process.env.CI,
+    // Siempre un servidor propio: nunca medir contra un `next dev` o un build viejo en el puerto.
+    reuseExistingServer: false,
     timeout: 60_000,
   },
   projects: [

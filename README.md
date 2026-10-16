@@ -29,3 +29,21 @@ pip install -r scripts/curriculum/independent/requirements.txt
 npm run verify                         # tipos, lint, pruebas, check curricular
 npm run curriculum:verify-independent  # segunda lectura en Python
 ```
+
+### App de producción (Next.js)
+
+```bash
+npm run app:dev            # desarrollo en http://localhost:3000
+npm run app:build          # build: 20 fichas y 5 niveles pre-generados
+npm run app:check-bundle   # la malla completa no viaja al navegador
+npm run test:e2e:app       # e2e contra next start (URLs, fidelidad, axe, seguridad, LCP)
+```
+
+### Prototipo (un solo HTML)
+
+```bash
+npm run prototype:build    # dist/prototype/index.html
+npm run test:e2e           # e2e del prototipo
+```
+
+`src/ui` contiene las pantallas compartidas; `app/` (Next.js) y `prototype/` (Vite) solo les inyectan datos, servicios y navegación.

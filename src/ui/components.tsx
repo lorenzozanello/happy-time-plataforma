@@ -240,13 +240,14 @@ export function RouteLink({
   to: Route;
   className?: string;
   children: ReactNode;
-  current?: boolean;
+  /** aria-current: "page" (esta página) o "true" (sección actual). */
+  current?: "page" | "true";
   label?: string;
 }) {
   const { urls, navigate } = useApp();
   const common = {
     className,
-    ...(current ? { "aria-current": "page" as const } : {}),
+    ...(current ? { "aria-current": current } : {}),
     ...(label ? { "aria-label": label } : {}),
   };
   if (!urls) {

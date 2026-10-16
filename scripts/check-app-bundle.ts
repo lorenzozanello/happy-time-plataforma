@@ -30,14 +30,26 @@ const release = CurriculumReleaseSchema.parse(releaseJson);
 const repo = createRepository(release);
 const catalog = buildCatalog(repo);
 
-/** Deshace los escapes de JSON y HTML para comparar palabras, no codificaciones. */
-function decode(s: string): string {
+/**
+ * Deshace los escapes de JSON (también anidados: el payload RSC va como cadena JSON dentro de un
+ * script, así que un salto de línea llega como `\\n`) y de HTML, para comparar palabras y no
+ * codificaciones.
+ */
+export function decode(input: string): string {
+  let s = input;
+  for (let prev = ""; prev !== s;) {
+    prev = s;
+    s = s
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\x([0-9a-fA-F]{2})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
+      .replace(/\\\\/g, "\\");
+  }
   return s
-    .replace(/\\u([0-9a-fA-F]{4})/g, (_, h: string) => String.fromCharCode(parseInt(h, 16)))
-    .replace(/\\[nrt"'\\/]/g, " ")
+    .replace(/\\[nrtbf"'/\\]/g, " ")
     .replace(/&(?:amp|lt|gt|quot|apos|nbsp);|&#x?[0-9a-fA-F]+;/g, (m) =>
       m === "&amp;" ? "&" : " ",
-    );
+    )
+    .replace(/\s+/g, " ");
 }
 
 function windowsOf(text: string): Set<string> {
@@ -48,15 +60,37 @@ function windowsOf(text: string): Set<string> {
 }
 
 /**
- * Unidades detectables (≥ 8 palabras). Una unidad está "presente" en una página solo si todas
- * sus secuencias aparecen: muchas unidades comparten su comienzo (p. ej. los propósitos).
+ * Huella de cada unidad. Con ≥ 8 palabras: sus secuencias de 8; se considera presente si aparece
+ * al menos el 60 % (muchas unidades comparten el comienzo, p. ej. los propósitos, así que una
+ * sola secuencia no basta; exigir todas dejaría pasar una copia con un corte). Las unidades
+ * cortas (< 8 palabras) con al menos 20 caracteres se buscan como texto literal.
  */
-const detectable = release.units.flatMap((u) => {
+const norm = (t: string) => t.replace(/\s+/g, " ").trim();
+interface Probe {
+  unitId: string;
+  windows: string[];
+  literal: string | null;
+}
+const detectable = release.units.flatMap((u): Probe[] => {
   const ws = [...windowsOf(u.text)];
-  return ws.length > 0 ? [{ unitId: u.unitId, windows: ws }] : [];
+  if (ws.length > 0) return [{ unitId: u.unitId, windows: ws, literal: null }];
+  const lit = norm(u.text);
+  return lit.length >= 20 ? [{ unitId: u.unitId, windows: [], literal: lit }] : [];
 });
 const allWindows = new Set<string>();
 for (const u of release.units) for (const s of windowsOf(u.text)) allWindows.add(s);
+const shortLiterals = detectable.flatMap((d) => (d.literal ? [d] : []));
+
+function presentUnits(decoded: string): string[] {
+  const present = windowsOf(decoded);
+  return detectable
+    .filter((d) => {
+      if (d.literal) return decoded.includes(d.literal);
+      const hits = d.windows.filter((w) => present.has(w)).length;
+      return d.windows.length <= 2 ? hits === d.windows.length : hits / d.windows.length >= 0.6;
+    })
+    .map((d) => d.unitId);
+}
 
 function walk(dir: string, ext: RegExp): string[] {
   if (!existsSync(dir)) return [];
@@ -72,9 +106,13 @@ const problems: string[] = [];
 const chunks = walk(join(NEXT, "static"), /\.js$/);
 let jsBytes = 0;
 for (const f of chunks) {
-  const text = decode(readFileSync(f, "utf8"));
-  jsBytes += text.length;
-  const hits = [...windowsOf(text)].filter((s) => allWindows.has(s));
+  const raw = readFileSync(f, "utf8");
+  jsBytes += raw.length;
+  const text = decode(raw);
+  const hits = [
+    ...[...windowsOf(text)].filter((s) => allWindows.has(s)),
+    ...shortLiterals.filter((d) => d.literal && text.includes(d.literal)).map((d) => d.literal),
+  ];
   if (hits.length > 0)
     problems.push(`${relative(ROOT, f)}: contiene texto curricular («${hits[0] ?? ""}»)`);
 }
@@ -112,28 +150,44 @@ function allowedFor(page: string): Set<string> {
   return new Set();
 }
 
-const pages = walk(join(NEXT, "server", "app"), /\.html$/);
+/**
+ * Cada página se sirve como HTML (carga directa) y como payload RSC (.rsc y segmentos .rsc,
+ * navegación en el cliente): se revisan todos sus archivos.
+ */
+const APP_DIR = join(NEXT, "server", "app");
+const pages = walk(APP_DIR, /\.html$/);
 const rows: string[] = [];
 for (const f of pages) {
-  const page = relative(join(NEXT, "server", "app"), f);
-  const html = readFileSync(f, "utf8");
-  const present = new Set(windowsOf(decode(html)));
-  const shown = detectable
-    .filter((d) => d.windows.every((w) => present.has(w)))
-    .map((d) => d.unitId);
+  const page = relative(APP_DIR, f);
+  const base = f.slice(0, -".html".length);
+  const files = [
+    f,
+    ...(existsSync(`${base}.rsc`) ? [`${base}.rsc`] : []),
+    ...walk(`${base}.segments`, /\.rsc$/),
+  ];
   const allowed = allowedFor(page);
-  // Un texto idéntico a una unidad permitida (p. ej. celdas combinadas entre niveles) no es extra.
-  const okTexts = new Set([...allowed, ...catalogUnits].map((id) => repo.maybeUnit(id)?.text));
-  const extra = shown.filter(
-    (id) => !allowed.has(id) && !catalogUnits.has(id) && !okTexts.has(repo.maybeUnit(id)?.text),
-  );
-  rows.push(
-    `${page.padEnd(28)} ${String(shown.length).padStart(4)} unidades · ${String(Math.round(html.length / 1024))} KB`,
-  );
-  if (extra.length > 0)
-    problems.push(
-      `${page}: incluye ${String(extra.length)} unidades que no muestra (p. ej. ${extra.slice(0, 3).join(", ")})`,
+  // Un texto idéntico a una unidad permitida o contenido en ella (p. ej. celdas combinadas entre
+  // niveles, «Ciclo II: preescolar» dentro de «Ciclo II: preescolar - transición…») no es extra.
+  const okTexts = [...allowed, ...catalogUnits].map((id) => norm(repo.maybeUnit(id)?.text ?? ""));
+  const coveredByAllowed = (id: string) => {
+    const t = norm(repo.maybeUnit(id)?.text ?? "");
+    return t !== "" && okTexts.some((ok) => ok.includes(t));
+  };
+  let shownMax = 0;
+  for (const file of files) {
+    const shown = presentUnits(decode(readFileSync(file, "utf8")));
+    shownMax = Math.max(shownMax, shown.length);
+    const extra = shown.filter(
+      (id) => !allowed.has(id) && !catalogUnits.has(id) && !coveredByAllowed(id),
     );
+    if (extra.length > 0)
+      problems.push(
+        `${relative(APP_DIR, file)}: incluye ${String(extra.length)} unidades que la página no muestra (p. ej. ${extra.slice(0, 3).join(", ")})`,
+      );
+  }
+  rows.push(
+    `${page.padEnd(28)} ${String(shownMax).padStart(4)} unidades · ${String(files.length)} archivos`,
+  );
 }
 
 /* 3 · El paquete de búsqueda es el único con toda la malla */

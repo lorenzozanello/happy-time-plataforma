@@ -7,7 +7,12 @@ import {
   snippet,
   type SearchIndex,
 } from "../../domain/curriculum/search";
-import { catalogLevel, catalogTitle, type SearchUnit } from "../../domain/curriculum/views";
+import {
+  catalogLevel,
+  catalogTitle,
+  type SearchBundle,
+  type SearchUnit,
+} from "../../domain/curriculum/views";
 import type { Route } from "../app/types";
 import { useApp } from "../app/state";
 import { EmptyState, ErrorState, Highlighted, Icon, RouteLink, Skeleton } from "../components";
@@ -15,6 +20,20 @@ import { EmptyState, ErrorState, Highlighted, Icon, RouteLink, Skeleton } from "
 interface Loaded {
   index: SearchIndex;
   units: Map<string, SearchUnit>;
+}
+
+/** El índice se reconstruye una vez por paquete, no cada vez que se abre Buscar. */
+const parsed = new WeakMap<SearchBundle, Loaded>();
+function prepare(bundle: SearchBundle): Loaded {
+  let p = parsed.get(bundle);
+  if (!p) {
+    p = {
+      index: loadSearchIndex(bundle.index),
+      units: new Map(bundle.units.map((u) => [u.unitId, u])),
+    };
+    parsed.set(bundle, p);
+  }
+  return p;
 }
 
 export function SearchScreen({ q: initial = "" }: { q?: string }) {
@@ -35,10 +54,7 @@ export function SearchScreen({ q: initial = "" }: { q?: string }) {
     loadSearch()
       .then((bundle) => {
         if (!alive) return;
-        setData({
-          index: loadSearchIndex(bundle.index),
-          units: new Map(bundle.units.map((u) => [u.unitId, u])),
-        });
+        setData(prepare(bundle));
         setFailed(false);
       })
       .catch(() => {

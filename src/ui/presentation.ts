@@ -30,15 +30,6 @@ export const COLLAPSIBLE_GROUPS: FieldGroup[] = [
 
 export const ROMAN = ["I", "II", "III", "IV"] as const;
 
-/**
- * Observación institucional que acompaña las alertas en la ficha.
- * Referencia estructural por id (Observaciones!A4 en la release 2026-06); si una release
- * reordena las observaciones, el diff de releases lo marcará y debe revisarse aquí.
- */
-export const ALERTS_PRINCIPLE_UNIT = "OBS-3";
-/** Principio que abre la malla en la primera visita (Observaciones!A2). */
-export const OPENING_PRINCIPLE_UNIT = "OBS-1";
-
 export function greeting(now = new Date()): string {
   const h = now.getHours();
   return h < 12 ? "Buenos días" : h < 19 ? "Buenas tardes" : "Buenas noches";

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useApp } from "../app/state";
-import { Button, Icon } from "../components";
+import { Button, Icon, RouteLink } from "../components";
 import {
   HAPPY_SIZES,
   HAPPY_STATES,
@@ -12,9 +12,15 @@ import { PALETTE } from "../theme";
 import { LevelsSetup } from "./Access";
 
 export function ProfileScreen() {
-  const { state, dispatch, navigate, services, repo } = useApp();
+  const { state, dispatch, services, catalog } = useApp();
   const [saved, setSaved] = useState(false);
   const [failOn, setFailOn] = useState(() => services.prototype?.getFailHappy() ?? false);
+  const releaseLine = (
+    <p className="muted small">
+      Release curricular {catalog.release} · {catalog.unitCount} unidades · huella{" "}
+      {catalog.sourceSha256.slice(0, 12)}…
+    </p>
+  );
   return (
     <div className="screen">
       <header className="screen__head">
@@ -34,56 +40,71 @@ export function ProfileScreen() {
       )}
 
       <nav className="link-list" aria-label="Más">
-        <button
-          type="button"
-          onClick={() => {
-            navigate({ name: "identity" });
-          }}
-        >
+        <RouteLink to={{ name: "identity" }}>
           <span>Identidad de Happy (provisional)</span>
           <Icon name="chevron" size={18} />
-        </button>
+        </RouteLink>
       </nav>
 
-      <section className="proto-tools" aria-labelledby="proto-tools">
-        <h2 id="proto-tools" className="section-title">
-          Herramientas del prototipo
-        </h2>
-        <p className="muted">Para revisar estados que en uso normal casi no se ven.</p>
-        <div className="stack">
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={failOn}
-              onChange={(e) => {
-                setFailOn(e.target.checked);
-                services.prototype?.setFailHappy(e.target.checked);
+      {services.prototype ? (
+        <section className="proto-tools" aria-labelledby="proto-tools">
+          <h2 id="proto-tools" className="section-title">
+            Herramientas del prototipo
+          </h2>
+          <p className="muted">Para revisar estados que en uso normal casi no se ven.</p>
+          <div className="stack">
+            <label className="switch">
+              <input
+                type="checkbox"
+                checked={failOn}
+                onChange={(e) => {
+                  setFailOn(e.target.checked);
+                  services.prototype?.setFailHappy(e.target.checked);
+                }}
+              />
+              <span>La próxima respuesta de Happy falla</span>
+            </label>
+            {releaseLine}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                dispatch({ type: "reset" });
               }}
-            />
-            <span>La próxima respuesta de Happy falla</span>
-          </label>
-          <p className="muted small">
-            Release curricular {repo.release.release} · {repo.release.counts.units} unidades ·
-            huella {repo.release.source.sha256.slice(0, 12)}…
-          </p>
-          <Button
-            variant="secondary"
-            onClick={() => {
-              dispatch({ type: "reset" });
-            }}
-          >
-            Borrar mis datos del prototipo
-          </Button>
-          <Button
-            variant="ghost"
-            onClick={() => {
-              dispatch({ type: "signOut" });
-            }}
-          >
-            Cerrar sesión
-          </Button>
-        </div>
-      </section>
+            >
+              Borrar mis datos del prototipo
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => {
+                dispatch({ type: "signOut" });
+              }}
+            >
+              Cerrar sesión
+            </Button>
+          </div>
+        </section>
+      ) : (
+        <section aria-labelledby="tus-datos">
+          <h2 id="tus-datos" className="section-title">
+            Tus datos
+          </h2>
+          <div className="stack">
+            <p className="muted">
+              Tus niveles, tu periodo y tus favoritos se guardan solo en este navegador. No se
+              envían a ningún servidor.
+            </p>
+            {releaseLine}
+            <Button
+              variant="secondary"
+              onClick={() => {
+                dispatch({ type: "reset" });
+              }}
+            >
+              Borrar mis datos de este navegador
+            </Button>
+          </div>
+        </section>
+      )}
     </div>
   );
 }

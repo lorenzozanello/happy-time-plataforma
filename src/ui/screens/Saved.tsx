@@ -1,5 +1,6 @@
+import { catalogExperience, catalogLevel, unitExperienceCode } from "../../domain/curriculum/views";
 import { useApp } from "../app/state";
-import { Button, EmptyState, Icon, PeriodChip } from "../components";
+import { Button, EmptyState, Icon, PeriodChip, RouteLink } from "../components";
 
 type Tab = "favoritos" | "ideas" | "planeaciones";
 const TABS: { id: Tab; label: string }[] = [
@@ -9,7 +10,7 @@ const TABS: { id: Tab; label: string }[] = [
 ];
 
 export function SavedScreen({ tab = "favoritos" }: { tab?: Tab }) {
-  const { state, repo, navigate, replace, dispatch } = useApp();
+  const { state, catalog, navigate, replace, dispatch } = useApp();
   const select = (t: Tab) => {
     replace({ name: "saved", tab: t });
   };
@@ -76,29 +77,26 @@ export function SavedScreen({ tab = "favoritos" }: { tab?: Tab }) {
             <ul className="card-list">
               {state.favorites.map((f) => {
                 if (f.target.type !== "experience") return null;
-                const e = repo.maybeExperience(f.target.code);
+                const e = catalogExperience(catalog, f.target.code);
                 if (!e) return null;
-                const changed = f.release !== repo.release.release;
+                const changed = f.release !== catalog.release;
                 return (
                   <li key={f.id}>
                     <div className="saved-item">
-                      <button
-                        type="button"
+                      <RouteLink
+                        to={{ name: "ficha", code: e.code }}
                         className="exp-card exp-card--link"
-                        onClick={() => {
-                          navigate({ name: "ficha", code: e.code });
-                        }}
                       >
                         <span className="exp-card__meta">
                           <span className="code">{e.code}</span>
                           <PeriodChip index={e.periodIndex} label={e.periodLiteral} />
                         </span>
-                        <span className="exp-card__title">{repo.title(e.code)}</span>
+                        <span className="exp-card__title">{e.title.text}</span>
                         <span className="exp-card__sub">
-                          {repo.level(e.levelId).labelLiteral}
+                          {catalogLevel(catalog, e.levelId)?.labelLiteral ?? e.levelId}
                           {changed && " · actualizada desde que la guardaste"}
                         </span>
-                      </button>
+                      </RouteLink>
                     </div>
                   </li>
                 );
@@ -146,7 +144,9 @@ export function SavedScreen({ tab = "favoritos" }: { tab?: Tab }) {
                       Basada en:{" "}
                       {[
                         ...new Set(
-                          i.sourceUnitIds.map((id) => repo.maybeUnit(id)?.code).filter(Boolean),
+                          i.sourceUnitIds
+                            .map((id) => unitExperienceCode(catalog, id))
+                            .filter(Boolean),
                         ),
                       ].map((code) => (
                         <button

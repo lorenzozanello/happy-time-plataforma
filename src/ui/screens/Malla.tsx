@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import type { LevelId } from "../../domain/curriculum/fields";
+import { catalogLevel, experienceAt, experiencesOfLevel } from "../../domain/curriculum/views";
 import { useApp } from "../app/state";
-import { Button, Icon, Literal, PeriodChip } from "../components";
+import { Icon, Literal, PeriodChip, RouteLink } from "../components";
 import { ROMAN } from "../presentation";
 
 /** Selector de periodo con forma de reloj: los cuatro periodos del año como cuatro cuartos. */
@@ -68,10 +69,10 @@ export function LevelPicker({
   value: LevelId;
   onChange: (l: LevelId) => void;
 }) {
-  const { repo } = useApp();
+  const { catalog } = useApp();
   return (
     <div className="level-picker" role="group" aria-label="Nivel">
-      {repo.levels.map((l) => (
+      {catalog.levels.map((l) => (
         <button
           key={l.id}
           type="button"
@@ -82,7 +83,7 @@ export function LevelPicker({
           }}
         >
           <span className="level-tab__name">{l.labelLiteral}</span>
-          <span className="level-tab__eq">{repo.levelField(l.id, "equivalencia").text}</span>
+          <span className="level-tab__eq">{l.equivalencia.text}</span>
         </button>
       ))}
     </div>
@@ -90,28 +91,21 @@ export function LevelPicker({
 }
 
 export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; periodIndex?: number }) {
-  const { repo, state, navigate, replace } = useApp();
+  const { catalog, state, replace, happyEnabled } = useApp();
   const [level, setLevel] = useState<LevelId>(levelId ?? state.work.levelIds[0] ?? "step-1");
   const [period, setPeriod] = useState<number>(periodIndex ?? state.work.periodIndex ?? 1);
-  const exps = repo.experiencesOf(level);
-  const exp = repo.experienceAt(level, period);
-  const titles = exps.map((e) => repo.title(e.code));
-  const alcance = repo.experienceField(exp.code, "alcance");
+  const exps = experiencesOfLevel(catalog, level);
+  const exp = experienceAt(catalog, level, period);
+  const levelLabel = catalogLevel(catalog, level)?.labelLiteral ?? level;
 
   return (
     <div className="screen">
       <header className="screen__head">
         <h1 className="display">Malla curricular</h1>
-        <button
-          type="button"
-          className="search-trigger"
-          onClick={() => {
-            navigate({ name: "search" });
-          }}
-        >
+        <RouteLink to={{ name: "search" }} className="search-trigger">
           <Icon name="search" size={20} />
           <span>Buscar en la malla</span>
-        </button>
+        </RouteLink>
       </header>
 
       <LevelPicker
@@ -129,95 +123,71 @@ export function MallaScreen({ levelId, periodIndex }: { levelId?: LevelId; perio
             setPeriod(p);
             replace({ name: "malla", levelId: level, periodIndex: p });
           }}
-          titles={titles}
+          titles={exps.map((e) => e.title.text)}
         />
-        <article className="exp-card exp-card--hero">
+        <article className="exp-card exp-card--hero" data-unit-id={exp.alcance.unitId}>
           <div className="exp-card__meta">
             <PeriodChip index={exp.periodIndex} label={exp.periodLiteral} />
           </div>
-          <h2 className="exp-card__title">{repo.title(exp.code)}</h2>
+          <h2 className="exp-card__title">{exp.title.text}</h2>
           <p className="exp-card__body">
-            <Literal text={alcance.text} />
+            <Literal text={exp.alcance.text} />
           </p>
           <div className="exp-card__actions">
-            <Button
-              variant="primary"
-              onClick={() => {
-                navigate({ name: "ficha", code: exp.code });
-              }}
-            >
+            <RouteLink to={{ name: "ficha", code: exp.code }} className="btn btn--primary">
               Abrir ficha
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                navigate({
+            </RouteLink>
+            {happyEnabled && (
+              <RouteLink
+                to={{
                   name: "happy",
                   context: { levelId: level, periodIndex: period, experienceCode: exp.code },
-                });
-              }}
-            >
-              Pensemos juntas
-            </Button>
+                }}
+                className="btn btn--ghost"
+              >
+                Pensemos juntas
+              </RouteLink>
+            )}
           </div>
         </article>
       </section>
 
       <section className="stack" aria-labelledby="year-title">
         <h2 id="year-title" className="section-title">
-          El año en {repo.level(level).labelLiteral}
+          El año en {levelLabel}
         </h2>
         <ol className="year-list">
           {exps.map((e) => (
             <li key={e.code}>
-              <button
-                type="button"
+              <RouteLink
+                to={{ name: "ficha", code: e.code }}
                 className={`year-item${e.code === exp.code ? " is-on" : ""}`}
-                aria-current={e.code === exp.code ? "true" : undefined}
-                onClick={() => {
-                  navigate({ name: "ficha", code: e.code });
-                }}
               >
                 <PeriodChip index={e.periodIndex} label={ROMAN[e.periodIndex - 1] ?? ""} />
                 <span className="year-item__title">
-                  {repo.title(e.code)}
+                  {e.title.text}
                   {e.code === exp.code && <span className="year-item__now"> · seleccionado</span>}
                 </span>
                 <Icon name="chevron" size={18} />
-              </button>
+              </RouteLink>
             </li>
           ))}
         </ol>
       </section>
 
       <nav className="link-list" aria-label="Más de la malla">
-        <button
-          type="button"
-          onClick={() => {
-            navigate({ name: "level", levelId: level });
-          }}
-        >
-          <span>Perfil de {repo.level(level).labelLiteral}</span>
+        <RouteLink to={{ name: "level", levelId: level }}>
+          <span>Perfil de {levelLabel}</span>
           <Icon name="chevron" size={18} />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            navigate({ name: "progression" });
-          }}
-        >
+        </RouteLink>
+        <RouteLink to={{ name: "progression" }}>
           <span>Progresión por dimensión</span>
           <Icon name="chevron" size={18} />
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            navigate({ name: "principles" });
-          }}
-        >
+        </RouteLink>
+        <RouteLink to={{ name: "principles" }}>
           <span>Principios de la malla</span>
           <Icon name="chevron" size={18} />
-        </button>
+        </RouteLink>
       </nav>
     </div>
   );

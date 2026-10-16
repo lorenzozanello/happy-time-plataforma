@@ -1,5 +1,8 @@
-import { useId, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { useId, useState, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import type { Unit } from "../domain/curriculum/schema";
+import { routeToHref } from "./app/routes";
+import { useApp } from "./app/state";
+import type { Route } from "./app/types";
 
 /* ── Iconos (trazos simples, heredan currentColor) ─────────────────────────── */
 const PATHS = {
@@ -220,5 +223,53 @@ export function Toast({ message }: { message: string | null }) {
     <div className="toast" role="status" aria-live="polite">
       {message && <span>{message}</span>}
     </div>
+  );
+}
+
+/**
+ * Enlace a una ruta de la app: <a href> real cuando hay URLs (producción) y botón en el prototipo.
+ * Los clics con modificador (nueva pestaña, etc.) se dejan al navegador.
+ */
+export function RouteLink({
+  to,
+  className,
+  children,
+  current,
+  label,
+}: {
+  to: Route;
+  className?: string;
+  children: ReactNode;
+  current?: boolean;
+  label?: string;
+}) {
+  const { urls, navigate } = useApp();
+  const common = {
+    className,
+    ...(current ? { "aria-current": "page" as const } : {}),
+    ...(label ? { "aria-label": label } : {}),
+  };
+  if (!urls) {
+    return (
+      <button
+        type="button"
+        {...common}
+        onClick={() => {
+          navigate(to);
+        }}
+      >
+        {children}
+      </button>
+    );
+  }
+  const onClick = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+    e.preventDefault();
+    navigate(to);
+  };
+  return (
+    <a href={routeToHref(to)} {...common} onClick={onClick}>
+      {children}
+    </a>
   );
 }

@@ -1,10 +1,17 @@
 import { useEffect, useRef, type ReactNode } from "react";
-import { useApp } from "./app/state";
+import {
+  buildFicha,
+  buildLevel,
+  buildPrinciples,
+  buildProgression,
+} from "../domain/curriculum/views";
+import { useApp, useRepo } from "./app/state";
 import { tabOf, type Route, type TabName } from "./app/types";
-import { Icon, IconButton, OfflineBanner } from "./components";
+import { Icon, IconButton, OfflineBanner, RouteLink } from "./components";
 import { HappyAvatar } from "./happy/HappyAvatar";
 import { OnboardingScreen, SignInScreen } from "./screens/Access";
-import { FichaScreen } from "./screens/Ficha";
+import { FichaNotFound, FichaScreen } from "./screens/Ficha";
+import { NotFoundScreen } from "./screens/NotFound";
 import { HappyScreen } from "./screens/Happy";
 import { HomeScreen } from "./screens/Home";
 import { MallaScreen } from "./screens/Malla";
@@ -25,7 +32,9 @@ function routeKey(r: Route): string {
   return JSON.stringify(r);
 }
 
-function Screen({ route }: { route: Route }) {
+/** Pantallas del prototipo: los modelos de vista se construyen en memoria desde el repositorio. */
+function PrototypeScreen({ route }: { route: Route }) {
+  const repo = useRepo();
   switch (route.name) {
     case "home":
       return <HomeScreen />;
@@ -36,16 +45,20 @@ function Screen({ route }: { route: Route }) {
           {...(route.periodIndex ? { periodIndex: route.periodIndex } : {})}
         />
       );
-    case "ficha":
-      return <FichaScreen code={route.code} />;
+    case "ficha": {
+      const data = buildFicha(repo, route.code);
+      return data ? <FichaScreen data={data} /> : <FichaNotFound />;
+    }
     case "search":
       return <SearchScreen {...(route.q ? { q: route.q } : {})} />;
-    case "level":
-      return <LevelScreen levelId={route.levelId} />;
+    case "level": {
+      const data = buildLevel(repo, route.levelId);
+      return data ? <LevelScreen data={data} /> : <NotFoundScreen />;
+    }
     case "progression":
-      return <ProgressionScreen />;
+      return <ProgressionScreen data={buildProgression(repo)} />;
     case "principles":
-      return <PrinciplesScreen />;
+      return <PrinciplesScreen data={buildPrinciples(repo)} />;
     case "happy":
       return (
         <HappyScreen
@@ -63,8 +76,18 @@ function Screen({ route }: { route: Route }) {
   }
 }
 
-export function App() {
-  const { state, route, visit, navigate, back, canGoBack, online } = useApp();
+/**
+ * Armazón común (barra superior, pestañas, foco tras navegar). Lo usan el prototipo y la app.
+ * `requireSession`: el prototipo simula el acceso; producción no tiene acceso hasta F4.
+ */
+export function Shell({
+  children,
+  requireSession = false,
+}: {
+  children: ReactNode;
+  requireSession?: boolean;
+}) {
+  const { state, route, visit, back, canGoBack, online, hydrated } = useApp();
   const firstVisit = useRef(true);
 
   // Tras navegar, el foco va al título de la nueva pantalla (lectores de pantalla y teclado).
@@ -80,8 +103,11 @@ export function App() {
     }
   }, [visit]);
 
-  if (!state.session) return <SignInScreen />;
-  if (!state.work.onboarded) return <OnboardingScreen />;
+  if (requireSession) {
+    if (!hydrated) return null;
+    if (!state.session) return <SignInScreen />;
+    if (!state.work.onboarded) return <OnboardingScreen />;
+  }
 
   const active = tabOf(route);
   const isRoot = TABS.some((t) => routeKey(t.route) === routeKey(route));
@@ -102,45 +128,44 @@ export function App() {
             </span>
           )}
           <div className="topbar__actions">
-            <IconButton
-              icon="search"
-              label="Abrir búsqueda"
-              onClick={() => {
-                navigate({ name: "search" });
-              }}
-            />
-            <IconButton
-              icon="settings"
-              label="Tu perfil"
-              onClick={() => {
-                navigate({ name: "tools" });
-              }}
-            />
+            <RouteLink to={{ name: "search" }} className="icon-btn" label="Abrir búsqueda">
+              <Icon name="search" />
+            </RouteLink>
+            <RouteLink to={{ name: "tools" }} className="icon-btn" label="Tu perfil">
+              <Icon name="settings" />
+            </RouteLink>
           </div>
         </div>
       </header>
 
       <nav className="tabbar" aria-label="Principal">
         {TABS.map((t) => (
-          <button
+          <RouteLink
             key={t.id}
-            type="button"
+            to={t.route}
             className={`tabbar__item${active === t.id ? " is-on" : ""}`}
-            aria-current={active === t.id ? "page" : undefined}
-            onClick={() => {
-              navigate(t.route);
-            }}
+            current={active === t.id}
           >
             <span className="tabbar__icon">{t.icon}</span>
             <span className="tabbar__label">{t.label}</span>
-          </button>
+          </RouteLink>
         ))}
       </nav>
 
       <main id="main" className="main" tabIndex={-1}>
         {!online && <OfflineBanner />}
-        <Screen key={`${route.name}#${String(visit)}`} route={route} />
+        {children}
       </main>
     </div>
+  );
+}
+
+/** Prototipo F2: armazón + pantallas en memoria, con acceso simulado. */
+export function App() {
+  const { route, visit } = useApp();
+  return (
+    <Shell requireSession>
+      <PrototypeScreen key={`${route.name}#${String(visit)}`} route={route} />
+    </Shell>
   );
 }

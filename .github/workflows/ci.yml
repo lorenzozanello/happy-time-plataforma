@@ -88,3 +88,40 @@ jobs:
           name: playwright-report
           path: test-results/
           retention-days: 7
+
+  app:
+    name: App de producción (build, bundle, e2e, accesibilidad, LCP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Instalar Chromium de Playwright
+        run: npx playwright install --with-deps chromium
+
+      - name: Build de producción (Next.js, páginas estáticas)
+        run: npm run app:build
+
+      - name: La malla completa no viaja al navegador (F3-03)
+        run: npm run app:check-bundle
+
+      - name: e2e contra next start (URLs, fidelidad, axe, seguridad, LCP)
+        run: npm run test:e2e:app
+
+      - name: Guardar reporte si falla
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-app
+          path: test-results/
+          retention-days: 7

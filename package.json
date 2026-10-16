@@ -8,7 +8,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -21,14 +21,23 @@
     "verify": "npm run typecheck && npm run lint && npm run test && npm run curriculum:check",
     "prototype:build": "tsx scripts/build-prototype.ts",
     "prototype:dev": "vite --config vite.config.ts",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "app:dev": "next dev",
+    "app:build": "next build",
+    "app:start": "next start",
+    "app:check-bundle": "tsx scripts/check-app-bundle.ts",
+    "test:e2e:app": "playwright test --config playwright.app.config.ts"
   },
   "dependencies": {
+    "@fontsource-variable/atkinson-hyperlegible-next": "5.3.0",
+    "@fontsource-variable/fredoka": "5.3.0",
     "fast-xml-parser": "5.11.2",
     "fflate": "0.8.3",
     "minisearch": "7.2.0",
+    "next": "16.3.8",
     "react": "19.3.1",
     "react-dom": "19.3.1",
+    "server-only": "0.0.1",
     "zod": "4.6.7"
   },
   "devDependencies": {

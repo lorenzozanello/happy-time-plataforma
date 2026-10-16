@@ -147,7 +147,7 @@ export function LevelsSetup({
   onDone: () => void;
   firstTime?: boolean;
 }) {
-  const { repo, state, dispatch } = useApp();
+  const { catalog, state, dispatch } = useApp();
   const [levels, setLevels] = useState<LevelId[]>(state.work.levelIds);
   const [period, setPeriod] = useState<number>(state.work.periodIndex ?? 1);
   const toggle = (id: LevelId) => {
@@ -164,7 +164,7 @@ export function LevelsSetup({
       </h2>
       <fieldset className="setup__levels">
         <legend className="muted">Puedes elegir varios.</legend>
-        {repo.levels.map((l) => (
+        {catalog.levels.map((l) => (
           <label key={l.id} className={`check-card${levels.includes(l.id) ? " is-on" : ""}`}>
             <input
               type="checkbox"
@@ -174,7 +174,7 @@ export function LevelsSetup({
               }}
             />
             <span className="check-card__name">{l.labelLiteral}</span>
-            <span className="check-card__eq">{repo.levelField(l.id, "equivalencia").text}</span>
+            <span className="check-card__eq">{l.equivalencia.text}</span>
           </label>
         ))}
       </fieldset>

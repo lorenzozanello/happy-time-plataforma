@@ -4,6 +4,7 @@ const executablePath = process.env.PW_CHROMIUM_PATH;
 
 export default defineConfig({
   testDir: "tests/e2e",
+  testMatch: /prototipo\.spec\.ts$/,
   timeout: 30_000,
   fullyParallel: true,
   reporter: process.env.CI ? [["github"], ["list"]] : "list",

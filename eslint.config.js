@@ -9,6 +9,8 @@ export default tseslint.config(
       "curriculum/build/**",
       "coverage/**",
       "dist/**",
+      ".next/**",
+      "next-env.d.ts",
       "test-results/**",
       "playwright-report/**",
     ],

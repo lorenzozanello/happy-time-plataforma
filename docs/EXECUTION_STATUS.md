@@ -1,15 +1,15 @@
 # EXECUTION_STATUS — Happy Time
 
 **Última actualización:** 2026-10-16
-**Fase actual:** F2 — Diseño y prototipo navegable (técnicamente completa; pendiente revisión del owner y docentes)
+**Fase actual:** F3 — Malla en producción (en curso) · F2 pendiente solo de revisión humana
 **Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe`
 
 | Fase | Estado | Evidencia / bloqueo |
 |---|---|---|
 | F0 Baseline | ✅ Aprobado por el owner (2026-10-16, “Procede”) | `docs/ARCHITECTURE_BASELINE_v1.md` |
 | F1 Compilador curricular | ✅ Fusionado (PR #1) · ⏳ OD-5 para cierre formal | PR #1, CI verde |
-| F2 Diseño y prototipo | ✅ Criterios técnicos · ⏳ revisión humana (F2-09) | PR #2; reloj provisional hasta OD-6 |
-| F3 Slice Malla | ⏸ | OD-1 |
+| F2 Diseño y prototipo | ✅ Fusionado (PR #2) · ⏳ revisión humana (F2-09) | Reloj provisional hasta OD-6 |
+| F3 Malla en producción | 🔄 En curso | Despliegue requiere OD-1 (Vercel) |
 | F4 Acceso y Guardados | ⏸ | OD-1, OD-3 |
 | F5 Happy núcleo | ⏸ | OD-2 |
 | F6 Happy extendida | ⏸ | OD-4 |
@@ -89,6 +89,24 @@ Hallazgos durante la verificación (corregidos): el compositor fijo de Happy tap
 
 Revisión adversarial independiente de F2 (corregida en el mismo PR): **alto** — los mensajes con datos sensibles se guardaban completos; **alto** — el validador de Happy tenía atajos (6 caminos en dos bloques, copia literal, autoridad con otra redacción, homoglifos); **medio** — falsos negativos y falsos positivos del detector de privacidad, reintento con el modo equivocado, Volver perdía el estado, chips de contexto no persistían, accesibilidad (foco, pestañas, estado solo por negrita); **bajo** — principios sin procedencia, citas de segmento sin marca de fragmento, ideas duplicadas.
 
+## F3 — Criterios de prueba (definidos antes de implementar)
+
+**Objetivo:** la malla en una app de producción (Next.js), de solo lectura, rápida en el celular, con URLs que se pueden compartir y la misma fidelidad del prototipo.
+
+**Supuestos:** OD-1 sin respuesta → se construye para Vercel (ADR-005) pero todo corre y se prueba sin él; el despliegue es el último paso y lo conecta el owner. Sin autenticación hasta F4 → no se publica en producción; solo vista previa con `noindex`. Happy y Guardados en servidor llegan en F4/F5: en F3 Happy muestra “próximamente” y los favoritos viven en el navegador.
+
+| ID | Criterio | Cómo se verifica |
+|---|---|---|
+| F3-01 | App Next.js en el mismo repo que reutiliza `src/domain` y `src/ui` (sin duplicar pantallas) | Build de producción en CI; el prototipo F2 sigue pasando sus e2e |
+| F3-02 | URLs compartibles | `/`, `/malla?nivel=&periodo=`, `/malla/[código]` (20), `/buscar?q=`, `/niveles/[nivel]` (5), `/progresion`, `/principios`, `/guardados`, `/happy`; página 404 propia |
+| F3-03 | Fichas estáticas y livianas | HTML pre-generado con los literales de la ficha; **ningún bundle del cliente contiene la malla completa** (prueba sobre `.next/static`) |
+| F3-04 | Búsqueda bajo demanda | Índice y textos en un archivo estático versionado por release, cargado solo en `/buscar`; mismos resultados que el dominio |
+| F3-05 | Fidelidad | Barrido e2e de las 20 fichas en la app: 480 unidades con su literal exacto |
+| F3-06 | Accesibilidad y móvil | axe sin violaciones serias en claro y oscuro; sin scroll horizontal a 360 px; objetivos ≥44 px; foco al título tras navegar |
+| F3-07 | Rendimiento | LCP de la ficha ≤ 2,0 s con red 4G simulada y CPU ×4 (medición de laboratorio en CI) |
+| F3-08 | Seguridad básica | Cabeceras CSP, `X-Content-Type-Options`, `Referrer-Policy`, `frame-ancestors 'none'`, `noindex`; tipografías alojadas en la app; sin secretos |
+| F3-09 | Despliegue | Vista previa en Vercel por PR — **requiere OD-1** |
+
 ## Decisiones abiertas del owner
 OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
 OD-7 resuelta: repositorio `lorenzozanello/happy-time-plataforma`.
@@ -96,5 +114,4 @@ Recomendado: activar protección de `main` (PR obligatorio + CI verde + code own
 Pendiente H-01: confirmación del hash contra un registro externo al ZIP.
 
 ## Próximo paso
-1. Owner + 2–3 docentes recorren el prototipo en el celular y dejan observaciones (cierra F2).
-2. F3 — Malla en producción (Next.js en Vercel): requiere OD-1 (cuenta de Vercel conectada al repositorio).
+F3 en curso en la rama `f3-malla-produccion`. En paralelo: owner + 2–3 docentes recorren el prototipo (cierra F2).

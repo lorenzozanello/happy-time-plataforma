@@ -1,0 +1,5 @@
+node_modules
+curriculum/build
+curriculum/source
+package-lock.json
+docs

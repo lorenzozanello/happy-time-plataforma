@@ -1,14 +1,14 @@
 # EXECUTION_STATUS — Happy Time
 
 **Última actualización:** 2026-10-16
-**Fase actual:** F1 — Compilador curricular (técnicamente completa; cierre formal pendiente de OD-5)
+**Fase actual:** F2 — Diseño y prototipo navegable (técnicamente completa; pendiente revisión del owner y docentes)
 **Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe`
 
 | Fase | Estado | Evidencia / bloqueo |
 |---|---|---|
 | F0 Baseline | ✅ Aprobado por el owner (2026-10-16, “Procede”) | `docs/ARCHITECTURE_BASELINE_v1.md` |
-| F1 Compilador curricular | ✅ Criterios técnicos cumplidos · ⏳ OD-5 | PR #1, CI verde |
-| F2 Diseño y prototipo | ⏸ | OD-6, OD-9 |
+| F1 Compilador curricular | ✅ Fusionado (PR #1) · ⏳ OD-5 para cierre formal | PR #1, CI verde |
+| F2 Diseño y prototipo | ✅ Criterios técnicos · ⏳ revisión humana (F2-09) | PR #2; reloj provisional hasta OD-6 |
 | F3 Slice Malla | ⏸ | OD-1 |
 | F4 Acceso y Guardados | ⏸ | OD-1, OD-3 |
 | F5 Happy núcleo | ⏸ | OD-2 |
@@ -53,6 +53,42 @@
 
 Revisión adversarial independiente: 1 defecto alto (atribución no verificada), 1 medio (entidades numéricas), 3 bajos. Todos corregidos en el mismo PR (ver ADR-012).
 
+## F2 — Criterios de prueba (definidos antes de implementar)
+
+**Objetivo:** validar la experiencia con datos reales antes de la implementación de producción, con un sistema de diseño y componentes que se reutilizan en F3.
+
+**Supuestos:** OD-6 sin respuesta → el reloj de Happy se re-ilustra desde la especificación del handoff (§8) y queda marcado **provisional**, aislado en un único componente reemplazable. OD-9 sin respuesta → se mantiene “Pensemos juntas.”. Happy es **simulada** (sin IA): respuestas deterministas construidas con unidades reales.
+
+| ID | Criterio | Cómo se verifica |
+|---|---|---|
+| F2-01 | Tokens de diseño en claro y oscuro con contraste AA | Prueba que calcula el contraste de cada par texto/fondo declarado (≥4,5:1 texto, ≥3:1 elementos gráficos) |
+| F2-02 | Identidad de Happy | Componente con 5 estados × 5 tamaños (24–96 px); reloj sin cuerpo; manecillas negras; pivote rojo; puntas cian arriba y morado abajo; lockup con “Happy” en morado; hoja de identidad visible en el prototipo |
+| F2-03 | Prototipo navegable con datos reales | Ingreso (correo + código), Inicio, Malla (nivel → periodo → experiencia), ficha, búsqueda, perfil de nivel, progresión, principios, Happy, Guardados |
+| F2-04 | Fidelidad en la interfaz | Todo texto institucional se pinta desde unidades por `unitId`; cada sección muestra su procedencia; la prueba anti-hardcode cubre `src/ui` y `prototype/` |
+| F2-05 | Happy simulada respeta el contrato | Respuestas validan con el esquema Zod de Happy; “Desde nuestra malla…” = literal por `unitId`; ≤3 caminos; generado etiquetado; aviso de privacidad ante datos sensibles; estados del avatar ligados a eventos |
+| F2-06 | Estados vacío, carga, error y sin conexión | Cada vista principal los define; e2e verifica vacío y error |
+| F2-07 | Móvil y accesibilidad | Sin scroll horizontal a 360 px; objetivos táctiles ≥44 px; axe sin violaciones serias/críticas en vistas principales (claro y oscuro); foco visible; `prefers-reduced-motion` |
+| F2-08 | Recorridos e2e | Los 5 recorridos del Baseline §4.2 en Playwright a 360 px y escritorio, en CI |
+| F2-09 | Revisión humana | Prototipo publicado; **salida de F2 = owner y 2–3 docentes lo recorren en móvil** y sus ajustes quedan incorporados |
+
+### Resultado F2 (2026-10-16)
+
+| ID | Resultado | Evidencia |
+|---|---|---|
+| F2-01 | ✅ | 22 pares texto/fondo × 2 temas con contraste AA calculado (`ui-domain.test.ts`) |
+| F2-02 | ✅ | `HappyAvatar`: 5 estados × 5 tamaños, hoja de identidad en el prototipo (25 avatares verificados en e2e) — **provisional** |
+| F2-03 | ✅ | Ingreso, Inicio, Malla, ficha, búsqueda, perfil de nivel, progresión, principios, Happy, Guardados, perfil |
+| F2-04 | ✅ | Texto institucional por `unitId`; procedencia en cada sección (incluidos los principios dentro de la ficha); anti-hardcode cubre `src/` y `prototype/`; barrido e2e de las 20 fichas: 480 unidades con su literal exacto |
+| F2-05 | ✅ | Validador endurecido (ADR-014, 30 casos); política de privacidad antes de guardar/enviar (44 casos + e2e sobre el almacenamiento); ≤3 caminos en toda la respuesta; estados ligados a eventos |
+| F2-06 | ✅ | Vacíos (Guardados, búsqueda), carga y error con reintento en las vistas con datos remotos (Happy, ingreso) y sin conexión, verificados en e2e. La malla viaja en el build: no tiene estado de carga |
+| F2-07 | ✅ | Sin scroll horizontal a 360 px; objetivos ≥44 px; axe sin violaciones serias en claro y oscuro; foco al título tras navegar; flechas en pestañas y reloj; `scroll-padding` bajo el encabezado fijo |
+| F2-08 | ✅ | 18 escenarios e2e × 2 proyectos (360 px y escritorio) + barrido de fidelidad = 35 pruebas; job de CI |
+| F2-09 | ⏳ | Prototipo publicado; falta el recorrido del owner y 2–3 docentes en móvil |
+
+Hallazgos durante la verificación (corregidos): el compositor fijo de Happy tapaba el último botón tras desplazarse; la tabla de identidad no era desplazable con teclado; en CI, con las tipografías reales, un botón quedaba bajo el encabezado fijo.
+
+Revisión adversarial independiente de F2 (corregida en el mismo PR): **alto** — los mensajes con datos sensibles se guardaban completos; **alto** — el validador de Happy tenía atajos (6 caminos en dos bloques, copia literal, autoridad con otra redacción, homoglifos); **medio** — falsos negativos y falsos positivos del detector de privacidad, reintento con el modo equivocado, Volver perdía el estado, chips de contexto no persistían, accesibilidad (foco, pestañas, estado solo por negrita); **bajo** — principios sin procedencia, citas de segmento sin marca de fragmento, ideas duplicadas.
+
 ## Decisiones abiertas del owner
 OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
 OD-7 resuelta: repositorio `lorenzozanello/happy-time-plataforma`.
@@ -60,5 +96,5 @@ Recomendado: activar protección de `main` (PR obligatorio + CI verde + code own
 Pendiente H-01: confirmación del hash contra un registro externo al ZIP.
 
 ## Próximo paso
-1. Owner: revisar y fusionar PR #1; responder OD-5 para cerrar F1 formalmente.
-2. F2 (diseño y prototipo navegable con datos reales) — requiere OD-6 (SVG del reloj) y OD-9.
+1. Owner + 2–3 docentes recorren el prototipo en el celular y dejan observaciones (cierra F2).
+2. F3 — Malla en producción (Next.js en Vercel): requiere OD-1 (cuenta de Vercel conectada al repositorio).

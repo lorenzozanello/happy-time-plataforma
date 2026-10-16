@@ -3,3 +3,6 @@ curriculum/build
 curriculum/source
 package-lock.json
 docs
+dist
+test-results
+playwright-report

@@ -76,3 +76,23 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 - **Propósitos compartidos** referencian unidades (`unitIds` + `segmentKey`), no celdas; para citar se usa siempre la unidad (ADR-007).
 - **Marcadores estructurales** de segmentación (“Tema:”, “Alertas:”, “En esta experiencia se logra cuando”) viven en código como los encabezados: son patrones de forma, no contenido citable.
 - `CODEOWNERS` cubre fuente, alias, validador y mapa de campos. **Recomendación al owner:** activar protección de `main` (PR obligatorio, CI verde y revisión de code owners).
+
+## ADR-013 — Interfaz compartida y prototipo de un solo archivo (F2)
+**Estado:** Aceptada (2026-10-16)
+**Contexto:** F2 debe validar la experiencia con datos reales sin construir aún la plataforma de producción, y sin que ese trabajo se tire en F3.
+**Decisión:**
+- La interfaz vive en `src/ui/` (React 19, TypeScript estricto) y depende solo de **contratos**: `AuthService`, `HappyService` y almacenamiento (`src/ui/app/types.ts`). El prototipo (`prototype/`) los implementa en memoria; F4 (Supabase) y F5 (`/api/happy`) los reemplazan sin tocar pantallas.
+- **Tokens en TypeScript** (`src/ui/theme.ts`) como fuente única: generan el CSS claro/oscuro y alimentan la prueba de contraste. Se usa CSS propio con variables en lugar de Tailwind (ajuste a ADR-005): el mismo CSS sirve en el prototipo y en Next.js.
+- **Tipografías:** Atkinson Hyperlegible Next para el texto (legibilidad en móvil para textos curriculares largos) y Fredoka para títulos, en armonía con el reloj redondeado de Happy.
+- **Periodos como cuartos de reloj:** el selector de periodo es un reloj de cuatro cuartos (I–IV en sentido horario) con la manecilla de Happy; cada periodo tiene un color de la paleta funcional que se repite en toda la app.
+- **Lo institucional se ve distinto de lo generado:** bloques “Desde nuestra malla…” con borde sólido y procedencia; “Como idea complementaria…” con borde punteado y etiqueta “Generado”.
+- **Empaquetado propio en un solo HTML** (`scripts/build-prototype.ts`) en lugar de `vite-plugin-singlefile`, que arrastraba 3 vulnerabilidades altas (`braces`).
+- **Contrato de Happy adelantado:** `src/domain/happy/schema.ts` (Zod + validador posterior) y `privacy.ts` (detector preliminar) ya son los de F5; el simulador del prototipo los cumple y las pruebas lo verifican.
+- **Reloj de Happy provisional:** re-ilustrado desde la especificación del handoff en un único componente (`src/ui/happy/HappyAvatar.tsx`), reemplazable cuando llegue el SVG institucional (OD-6).
+
+## ADR-014 — Política de privacidad de entrada y validador de salida (refinan ADR-009 y ADR-007)
+**Estado:** Aceptada (2026-10-16), tras la revisión adversarial independiente de F2.
+**Decisión:**
+- **Entrada:** se marca como sensible lo que **identifica** a una persona: nombre, contacto, documento o dirección. Los términos de salud o apoyo por sí solos (PIAR, DUA, discapacidad, “un niño con autismo”) **no** se bloquean: son vocabulario de la malla y de la inclusión. La política corre en la interfaz **antes** de guardar o enviar: solo se persiste la versión redactada y, si hay datos identificables, no se llama a Happy. En F5 se repite en el servidor.
+- **Salida:** el validador normaliza Unicode (NFKC, invisibles, homoglifos, tildes) y rechaza: reclamos de autoridad institucional en cualquier texto generado (incluidos avisos y etiquetas de acción), diagnósticos y calificaciones, más de 3 caminos en toda la respuesta, copia literal de la malla (ventana de 8 palabras), citas no recuperadas, segmentos o experiencias inexistentes, textos sin límite y modos no habilitados.
+- Corpus de prueba: 44 mensajes de privacidad y 30 casos de validador, tomados de la revisión.

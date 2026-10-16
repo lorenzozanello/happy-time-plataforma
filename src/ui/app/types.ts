@@ -103,11 +103,12 @@ export type Route =
   | { name: "happy"; threadId?: string; mode?: Mode; context?: HappyContext }
   | { name: "saved"; tab?: "favoritos" | "ideas" | "planeaciones" }
   | { name: "identity" }
-  | { name: "tools" };
+  | { name: "tools" }
+  | { name: "notFound" };
 
 export type TabName = "home" | "malla" | "happy" | "saved";
 
-export function tabOf(route: Route): TabName {
+export function tabOf(route: Route): TabName | undefined {
   switch (route.name) {
     case "home":
       return "home";
@@ -118,6 +119,8 @@ export function tabOf(route: Route): TabName {
     case "identity":
     case "tools":
       return "home";
+    case "notFound":
+      return undefined;
     default:
       return "malla";
   }

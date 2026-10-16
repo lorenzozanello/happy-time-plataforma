@@ -1,5 +1,23 @@
 # CHANGELOG — Happy Time
 
+## [F3] 2026-10-16 — Malla en producción (Next.js)
+### Agregado
+- App Next.js 16 en `app/` que reutiliza las pantallas de `src/ui` con modelos de vista serializables y navegación inyectada.
+- URLs compartibles: `/`, `/malla?nivel=&periodo=`, `/malla/[código]` (20), `/buscar?q=`, `/niveles/[nivel]` (5), `/progresion`, `/principios`, `/guardados`, `/happy`, `/perfil`, `/identidad`; 404 y páginas de error propias en español.
+- Fichas y niveles pre-generados; búsqueda como archivo estático versionado por release, cargado solo en `/buscar`.
+- Cabeceras de seguridad, `noindex` y tipografías alojadas en la app.
+- `npm run app:check-bundle`: ningún JavaScript del cliente contiene texto curricular; cada página lleva solo sus unidades.
+- e2e de la app contra `next start` (24 escenarios × 360 px y escritorio): URLs, fidelidad de las 20 fichas, sin JavaScript, búsqueda, datos del navegador, axe claro/oscuro, seguridad y LCP. Job de CI propio.
+
+### Corregido (revisión adversarial independiente)
+- «Volver» podía sacar a la docente de la app; ahora usa el historial solo si es de la app y, si no, la pantalla padre.
+- La malla y la búsqueda quedaban desincronizadas de la URL tras atrás/adelante o la pestaña.
+- Una URL (`periodo=2.5`) o datos guardados inválidos tumbaban la app; se validan y hay páginas de error en español.
+- La malla mostraba una experiencia equivocada antes de leer la URL y los datos guardados; ahora muestra un esqueleto.
+- La comprobación del bundle no veía unidades con saltos de línea ni los payloads RSC; se endureció y se probó con mutaciones.
+- JavaScript por página de ~290 KB a ~185 KB (gzip): módulos cliente por página, MiniSearch solo en `/buscar`, Zod fuera de la app.
+- Visitar una ficha inexistente borraba «Continuar donde quedaste»; StrictMode movía el foco al cargar.
+
 ## [F2] 2026-10-16 — Sistema de diseño y prototipo navegable
 ### Agregado
 - Tokens de diseño claro/oscuro con prueba de contraste AA; CSS móvil primero con objetivos de 44 px.

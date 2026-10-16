@@ -1,18 +1,18 @@
 import {
   createContext,
-  useCallback,
   useContext,
   useEffect,
   useMemo,
   useReducer,
   useRef,
-  useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import type { CurriculumRepository } from "../../domain/curriculum/repository";
-import type { SearchIndex } from "../../domain/curriculum/search";
+import { catalogExperience, type Catalog, type SearchBundle } from "../../domain/curriculum/views";
+import { EMPTY, sanitizeStored, type AppState, type ResponseCheck } from "./persisted";
+import type { Navigation } from "./routes";
 import type {
-  Favorite,
   FavoriteTarget,
   Route,
   SavedIdea,
@@ -22,23 +22,7 @@ import type {
   WorkContext,
 } from "./types";
 
-export interface AppState {
-  session: Session | null;
-  work: WorkContext;
-  favorites: Favorite[];
-  ideas: SavedIdea[];
-  recentSearches: string[];
-  threads: Thread[];
-}
-
-const EMPTY: AppState = {
-  session: null,
-  work: { levelIds: [], onboarded: false },
-  favorites: [],
-  ideas: [],
-  recentSearches: [],
-  threads: [],
-};
+export type { AppState };
 
 type Action =
   | { type: "signIn"; session: Session }
@@ -49,7 +33,8 @@ type Action =
   | { type: "removeIdea"; id: string }
   | { type: "search"; q: string }
   | { type: "upsertThread"; thread: Thread }
-  | { type: "reset" };
+  | { type: "reset" }
+  | { type: "hydrate"; state?: AppState };
 
 export const favoriteKey = (t: FavoriteTarget) =>
   t.type === "experience" ? `experience:${t.code}` : `unit:${t.unitId}`;
@@ -95,25 +80,51 @@ function reducer(state: AppState, a: Action): AppState {
       };
     case "reset":
       return EMPTY;
+    case "hydrate":
+      return a.state ?? state;
   }
 }
 
-const STORAGE_KEY = "ht.prototipo.v1";
+/** Estado raíz: datos de la docente + si ya se leyó el almacenamiento del navegador. */
+interface Root {
+  app: AppState;
+  hydrated: boolean;
+}
+function rootReducer(r: Root, a: Action): Root {
+  if (a.type === "hydrate") return { app: reducer(r.app, a), hydrated: true };
+  return { ...r, app: reducer(r.app, a) };
+}
+
+const subscribeOnline = (cb: () => void) => {
+  window.addEventListener("online", cb);
+  window.addEventListener("offline", cb);
+  return () => {
+    window.removeEventListener("online", cb);
+    window.removeEventListener("offline", cb);
+  };
+};
 
 interface AppApi {
   state: AppState;
+  /** true cuando ya se leyó el almacenamiento del navegador (tras el montaje). */
+  hydrated: boolean;
   dispatch: (a: Action) => void;
-  repo: CurriculumRepository;
-  search: SearchIndex;
+  catalog: Catalog;
+  /** Repositorio completo: solo en el prototipo (Happy simulada). En producción no viaja al cliente. */
+  repo?: CurriculumRepository;
+  /** Paquete de búsqueda, cargado bajo demanda (archivo estático en producción). */
+  loadSearch: () => Promise<SearchBundle>;
   services: Services;
   route: Route;
-  /** Identificador de la visita actual: cambia al navegar, se conserva al reemplazar. */
   visit: number;
   navigate: (r: Route) => void;
-  /** Actualiza la ruta actual sin crear una entrada nueva (Volver conserva el estado). */
   replace: (r: Route) => void;
   back: () => void;
   canGoBack: boolean;
+  /** La navegación usa URLs reales (enlaces <a>) o es interna (prototipo). */
+  urls: boolean;
+  /** Happy disponible en este despliegue (en F3 la app de producción aún no la incluye). */
+  happyEnabled: boolean;
   online: boolean;
   isFavorite: (t: FavoriteTarget) => boolean;
 }
@@ -121,75 +132,78 @@ interface AppApi {
 const Ctx = createContext<AppApi | null>(null);
 
 export function AppProvider({
+  catalog,
   repo,
-  search,
+  loadSearch,
   services,
-  initialRoute = { name: "home" },
+  navigation,
+  storageKey = "ht.prototipo.v1",
+  happyEnabled = true,
+  checkResponse,
   children,
 }: {
-  repo: CurriculumRepository;
-  search: SearchIndex;
+  catalog: Catalog;
+  repo?: CurriculumRepository;
+  loadSearch: () => Promise<SearchBundle>;
   services: Services;
-  initialRoute?: Route;
+  navigation: Navigation;
+  /** Clave del almacenamiento del navegador (el prototipo y la app no comparten datos). */
+  storageKey?: string;
+  happyEnabled?: boolean;
+  /** Valida respuestas de Happy guardadas (sin él, los hilos guardados se descartan). */
+  checkResponse?: ResponseCheck;
   children: ReactNode;
 }) {
-  const [state, dispatch] = useReducer(reducer, EMPTY, () => {
-    try {
-      const raw = services.storage.get(STORAGE_KEY);
-      return raw ? { ...EMPTY, ...(JSON.parse(raw) as Partial<AppState>) } : EMPTY;
-    } catch {
-      return EMPTY;
-    }
-  });
-  const [stack, setStack] = useState<{ route: Route; visit: number }[]>([
-    { route: initialRoute, visit: 0 },
-  ]);
-  const [online, setOnline] = useState(() =>
-    typeof navigator === "undefined" ? true : navigator.onLine,
+  const [root, dispatch] = useReducer(rootReducer, { app: EMPTY, hydrated: false });
+  const { app: state, hydrated } = root;
+  const online = useSyncExternalStore(
+    subscribeOnline,
+    () => navigator.onLine,
+    () => true,
   );
 
+  // El almacenamiento se lee una sola vez, después de montar: el HTML del servidor y el primer
+  // render coinciden. Se valida con el catálogo y el validador del montaje (no se re-hidrata
+  // si cambian de identidad).
+  const deps = useRef({ catalog, checkResponse });
   useEffect(() => {
+    let stored: AppState | undefined;
     try {
-      services.storage.set(STORAGE_KEY, JSON.stringify(state));
+      const raw = services.storage.get(storageKey);
+      if (raw)
+        stored = sanitizeStored(
+          JSON.parse(raw) as unknown,
+          deps.current.catalog,
+          deps.current.checkResponse,
+        );
     } catch {
-      /* el almacenamiento puede no estar disponible: el prototipo sigue en memoria */
+      /* almacenamiento ilegible: se empieza vacío */
     }
-  }, [state, services.storage]);
+    dispatch({ type: "hydrate", ...(stored ? { state: stored } : {}) });
+  }, [services.storage, storageKey]);
 
   useEffect(() => {
-    const on = () => {
-      setOnline(true);
-    };
-    const off = () => {
-      setOnline(false);
-    };
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
-  }, []);
+    if (!hydrated) return;
+    try {
+      services.storage.set(storageKey, JSON.stringify(state));
+    } catch {
+      /* el almacenamiento puede no estar disponible: se sigue en memoria */
+    }
+  }, [state, hydrated, services.storage, storageKey]);
 
-  const top = stack[stack.length - 1] ?? { route: initialRoute, visit: 0 };
-
-  const visits = useRef(0);
-  const navigate = useCallback((r: Route) => {
-    visits.current += 1;
-    const visit = visits.current;
-    setStack((s) => [...s.slice(-30), { route: r, visit }]);
-    if (r.name === "ficha") dispatch({ type: "work", patch: { lastExperience: r.code } });
-    window.scrollTo({ top: 0 });
-  }, []);
-  const replace = useCallback((r: Route) => {
-    setStack((s) => {
-      const last = s.at(-1);
-      return last ? [...s.slice(0, -1), { route: r, visit: last.visit }] : [{ route: r, visit: 0 }];
-    });
-  }, []);
-  const back = useCallback(() => {
-    setStack((s) => (s.length > 1 ? s.slice(0, -1) : s));
-  }, []);
+  const lastFicha = useRef<string | null>(null);
+  useEffect(() => {
+    const r = navigation.route;
+    if (
+      r.name === "ficha" &&
+      r.code !== lastFicha.current &&
+      hydrated &&
+      catalogExperience(catalog, r.code)
+    ) {
+      lastFicha.current = r.code;
+      dispatch({ type: "work", patch: { lastExperience: r.code } });
+    }
+  }, [navigation.route, hydrated, catalog]);
 
   const favSet = useMemo(
     () => new Set(state.favorites.map((f) => favoriteKey(f.target))),
@@ -198,20 +212,31 @@ export function AppProvider({
 
   const api: AppApi = {
     state,
+    hydrated,
     dispatch,
-    repo,
-    search,
+    catalog,
+    ...(repo ? { repo } : {}),
+    loadSearch,
     services,
-    route: top.route,
-    visit: top.visit,
-    navigate,
-    replace,
-    back,
-    canGoBack: stack.length > 1,
+    route: navigation.route,
+    visit: navigation.visit,
+    navigate: navigation.navigate,
+    replace: navigation.replace,
+    back: navigation.back,
+    canGoBack: navigation.canGoBack,
+    urls: navigation.urls,
+    happyEnabled,
     online,
     isFavorite: (t) => favSet.has(favoriteKey(t)),
   };
   return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
+}
+
+/** Repositorio completo; solo existe donde Happy está disponible (prototipo). */
+export function useRepo(): CurriculumRepository {
+  const { repo } = useApp();
+  if (!repo) throw new Error("Esta pantalla requiere el repositorio curricular completo");
+  return repo;
 }
 
 export function useApp(): AppApi {

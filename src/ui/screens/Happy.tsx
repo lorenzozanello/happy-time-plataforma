@@ -2,12 +2,13 @@ import { useEffect, useRef, useState } from "react";
 import { shortHeader } from "../../domain/curriculum/repository";
 import { checkPrivacy, PRIVACY_MESSAGE } from "../../domain/happy/privacy";
 import type { Block, HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
-import { newId, now, useApp } from "../app/state";
+import { newId, now, useApp, useRepo } from "../app/state";
 import type { Thread, ThreadMessage } from "../app/types";
 import { Button, ErrorState, Icon, IconButton, Literal, Provenance, Skeleton } from "../components";
 import { HappyAvatar, HappyLockup, type HappyState } from "../happy/HappyAvatar";
 import { ROMAN } from "../presentation";
 import { INTENTS } from "./Home";
+import { HappyComingSoon } from "./HappySoon";
 
 const PLACEHOLDER: Record<Mode, string> = {
   explorar: "Cuéntame qué buscas, o pide ideas para la experiencia elegida",
@@ -19,17 +20,22 @@ const PLACEHOLDER: Record<Mode, string> = {
   general: "Escribe tu pregunta",
 };
 
-export function HappyScreen({
-  threadId,
-  mode: initialMode,
-  context: initialContext,
-}: {
+interface HappyProps {
   threadId?: string;
   mode?: Mode;
   context?: HappyContext;
-}) {
+}
+
+export function HappyScreen(props: HappyProps) {
+  const { repo, happyEnabled } = useApp();
+  if (!repo || !happyEnabled) return <HappyComingSoon />;
+  return <HappyChat {...props} />;
+}
+
+function HappyChat({ threadId, mode: initialMode, context: initialContext }: HappyProps) {
   const app = useApp();
-  const { state, navigate, replace, dispatch, services, repo, online } = app;
+  const repo = useRepo();
+  const { state, navigate, replace, dispatch, services, online } = app;
   const existing = threadId ? state.threads.find((t) => t.id === threadId) : undefined;
   const [thread, setThread] = useState<Thread | undefined>(existing);
   const [mode, setMode] = useState<Mode | undefined>(existing?.mode ?? initialMode);
@@ -412,7 +418,7 @@ function ContextChips({
   context: HappyContext;
   onRemove: (k: keyof HappyContext) => void;
 }) {
-  const { repo } = useApp();
+  const repo = useRepo();
   const items: { key: keyof HappyContext; label: string }[] = [];
   const lvl = context.levelId ? repo.levels.find((l) => l.id === context.levelId) : undefined;
   if (lvl) items.push({ key: "levelId", label: lvl.labelLiteral });
@@ -546,7 +552,8 @@ function BlockView({
   onSaveIdea?: ((title: string, text: string, r: HappyResponse) => void) | undefined;
   onLand?: ((title: string) => void) | undefined;
 }) {
-  const { repo, navigate } = useApp();
+  const { navigate } = useApp();
+  const repo = useRepo();
   switch (block.kind) {
     case "malla_ref": {
       const u = repo.maybeUnit(block.unitId);

@@ -1,6 +1,7 @@
+import { catalogExperience, catalogLevel, experienceAt } from "../../domain/curriculum/views";
 import type { Mode } from "../../domain/happy/schema";
 import { useApp } from "../app/state";
-import { Button, EmptyState, Icon, PeriodChip } from "../components";
+import { EmptyState, Icon, PeriodChip, RouteLink } from "../components";
 import { HappyAvatar } from "../happy/HappyAvatar";
 import { ROMAN, greeting } from "../presentation";
 
@@ -11,22 +12,26 @@ export const INTENTS: { mode: Mode; label: string; hint: string }[] = [
 ];
 
 export function HomeScreen() {
-  const { repo, state, navigate } = useApp();
+  const { catalog, state, hydrated, happyEnabled: happyAvailable } = useApp();
   const { work, recentSearches, favorites } = state;
-  const last = work.lastExperience ? repo.maybeExperience(work.lastExperience) : undefined;
-  const lastThread = work.lastThreadId
-    ? state.threads.find((t) => t.id === work.lastThreadId)
-    : undefined;
+  const last = work.lastExperience ? catalogExperience(catalog, work.lastExperience) : undefined;
+  const lastThread =
+    happyAvailable && work.lastThreadId
+      ? state.threads.find((t) => t.id === work.lastThreadId)
+      : undefined;
   const period = work.periodIndex ?? 1;
-  const mine = work.levelIds.map((l) => repo.experienceAt(l, period));
+  const mine = work.levelIds.map((l) => experienceAt(catalog, l, period));
   const happyContext = last
     ? { levelId: last.levelId, periodIndex: last.periodIndex, experienceCode: last.code }
     : {};
+  const levelLabel = (id: string) => catalogLevel(catalog, id)?.labelLiteral ?? id;
 
   return (
     <div className="screen home">
       <header className="screen__head">
-        <p className="eyebrowless">{greeting()}</p>
+        <p className="eyebrowless" suppressHydrationWarning>
+          {hydrated ? greeting() : "Hola"}
+        </p>
         <h1 className="display">¿Qué preparamos hoy?</h1>
       </header>
 
@@ -35,20 +40,14 @@ export function HomeScreen() {
           <h2 id="continuar" className="section-title">
             Continuar donde quedaste
           </h2>
-          <button
-            type="button"
-            className="exp-card exp-card--link"
-            onClick={() => {
-              navigate({ name: "ficha", code: last.code });
-            }}
-          >
+          <RouteLink to={{ name: "ficha", code: last.code }} className="exp-card exp-card--link">
             <span className="exp-card__meta">
               <span className="code">{last.code}</span>
               <PeriodChip index={last.periodIndex} label={last.periodLiteral} />
             </span>
-            <span className="exp-card__title">{repo.title(last.code)}</span>
-            <span className="exp-card__sub">{repo.level(last.levelId).labelLiteral}</span>
-          </button>
+            <span className="exp-card__title">{last.title.text}</span>
+            <span className="exp-card__sub">{levelLabel(last.levelId)}</span>
+          </RouteLink>
         </section>
       )}
 
@@ -57,48 +56,31 @@ export function HomeScreen() {
           <h2 id="periodo" className="section-title">
             Tu periodo {ROMAN[period - 1]}
           </h2>
-          <button
-            type="button"
-            className="link"
-            onClick={() => {
-              navigate({ name: "malla" });
-            }}
-          >
+          <RouteLink to={{ name: "malla" }} className="link">
             Ver toda la malla
-          </button>
+          </RouteLink>
         </div>
-        {mine.length === 0 ? (
+        {!hydrated ? null : mine.length === 0 ? (
           <EmptyState
             title="Elige tus niveles"
             body="Así verás aquí las experiencias de tu periodo sin buscarlas."
             action={
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  navigate({ name: "tools" });
-                }}
-              >
+              <RouteLink to={{ name: "tools" }} className="btn btn--secondary">
                 Elegir mis niveles
-              </Button>
+              </RouteLink>
             }
           />
         ) : (
           <ul className="card-list">
             {mine.map((e) => (
               <li key={e.code}>
-                <button
-                  type="button"
-                  className="exp-card exp-card--link"
-                  onClick={() => {
-                    navigate({ name: "ficha", code: e.code });
-                  }}
-                >
+                <RouteLink to={{ name: "ficha", code: e.code }} className="exp-card exp-card--link">
                   <span className="exp-card__meta">
                     <span className="code">{e.code}</span>
-                    <span className="exp-card__sub">{repo.level(e.levelId).labelLiteral}</span>
+                    <span className="exp-card__sub">{levelLabel(e.levelId)}</span>
                   </span>
-                  <span className="exp-card__title">{repo.title(e.code)}</span>
-                </button>
+                  <span className="exp-card__title">{e.title.text}</span>
+                </RouteLink>
               </li>
             ))}
           </ul>
@@ -110,16 +92,10 @@ export function HomeScreen() {
           <h2 id="retomar" className="section-title">
             Retomar con Happy
           </h2>
-          <button
-            type="button"
-            className="thread-item"
-            onClick={() => {
-              navigate({ name: "happy", threadId: lastThread.id });
-            }}
-          >
+          <RouteLink to={{ name: "happy", threadId: lastThread.id }} className="thread-item">
             <span>{lastThread.title}</span>
             <Icon name="chevron" size={18} />
-          </button>
+          </RouteLink>
         </section>
       )}
 
@@ -131,25 +107,26 @@ export function HomeScreen() {
               Pensemos juntas.
             </h2>
             <p className="happy-entry__promise">
-              Tú defines la intención. Happy te ayuda a encontrar el camino.
+              {happyAvailable
+                ? "Tú defines la intención. Happy te ayuda a encontrar el camino."
+                : "Happy llega en la próxima versión. Mientras tanto, la malla completa está aquí."}
             </p>
           </div>
         </div>
-        <div className="intent-grid">
-          {INTENTS.map((i) => (
-            <button
-              key={i.mode}
-              type="button"
-              className="intent"
-              onClick={() => {
-                navigate({ name: "happy", mode: i.mode, context: happyContext });
-              }}
-            >
-              <span className="intent__label">{i.label}</span>
-              <span className="intent__hint">{i.hint}</span>
-            </button>
-          ))}
-        </div>
+        {happyAvailable && (
+          <div className="intent-grid">
+            {INTENTS.map((i) => (
+              <RouteLink
+                key={i.mode}
+                to={{ name: "happy", mode: i.mode, context: happyContext }}
+                className="intent"
+              >
+                <span className="intent__label">{i.label}</span>
+                <span className="intent__hint">{i.hint}</span>
+              </RouteLink>
+            ))}
+          </div>
+        )}
       </section>
 
       {recentSearches.length > 0 && (
@@ -159,17 +136,10 @@ export function HomeScreen() {
           </h2>
           <div className="chip-row">
             {recentSearches.map((q) => (
-              <button
-                key={q}
-                type="button"
-                className="chip"
-                onClick={() => {
-                  navigate({ name: "search", q });
-                }}
-              >
+              <RouteLink key={q} to={{ name: "search", q }} className="chip">
                 <Icon name="search" size={16} />
                 {q}
-              </button>
+              </RouteLink>
             ))}
           </div>
         </section>
@@ -181,15 +151,9 @@ export function HomeScreen() {
             Favoritos
           </h2>
           {favorites.length > 0 && (
-            <button
-              type="button"
-              className="link"
-              onClick={() => {
-                navigate({ name: "saved", tab: "favoritos" });
-              }}
-            >
+            <RouteLink to={{ name: "saved", tab: "favoritos" }} className="link">
               Ver todos
-            </button>
+            </RouteLink>
           )}
         </div>
         {favorites.length === 0 ? (
@@ -198,23 +162,22 @@ export function HomeScreen() {
           </p>
         ) : (
           <ul className="card-list">
-            {favorites.slice(0, 3).map((f) =>
-              f.target.type === "experience" ? (
+            {favorites.slice(0, 3).map((f) => {
+              if (f.target.type !== "experience") return null;
+              const e = catalogExperience(catalog, f.target.code);
+              if (!e) return null;
+              return (
                 <li key={f.id}>
-                  <button
-                    type="button"
+                  <RouteLink
+                    to={{ name: "ficha", code: e.code }}
                     className="exp-card exp-card--link exp-card--compact"
-                    onClick={() => {
-                      if (f.target.type === "experience")
-                        navigate({ name: "ficha", code: f.target.code });
-                    }}
                   >
-                    <span className="code">{f.target.code}</span>
-                    <span className="exp-card__title">{repo.title(f.target.code)}</span>
-                  </button>
+                    <span className="code">{e.code}</span>
+                    <span className="exp-card__title">{e.title.text}</span>
+                  </RouteLink>
                 </li>
-              ) : null,
-            )}
+              );
+            })}
           </ul>
         )}
       </section>

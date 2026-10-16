@@ -1,33 +1,31 @@
 import { useState } from "react";
-import { LEVEL_FIELDS, type DimensionKey, type LevelId } from "../../domain/curriculum/fields";
-import { useApp } from "../app/state";
-import { Literal, PeriodChip, Provenance, UnitBlock } from "../components";
+import type { DimensionKey } from "../../domain/curriculum/fields";
+import type { LevelData, PrinciplesData, ProgressionData } from "../../domain/curriculum/views";
+import { Literal, PeriodChip, Provenance, RouteLink, UnitBlock } from "../components";
 
-export function LevelScreen({ levelId }: { levelId: LevelId }) {
-  const { repo, navigate } = useApp();
-  const level = repo.level(levelId);
-  const field = (k: (typeof LEVEL_FIELDS)[number]["key"]) => repo.levelField(levelId, k);
+export function LevelScreen({ data }: { data: LevelData }) {
+  const { level, fields } = data;
   return (
     <div className="screen">
       <header className="screen__head">
         <h1 className="display">{level.labelLiteral}</h1>
         <p className="lead">
-          {field("equivalencia").text} · {field("edad_entrada").text} a {field("edad_salida").text}
+          {level.equivalencia.text} · {level.edadEntrada.text} a {level.edadSalida.text}
         </p>
-        <p className="muted">
-          <Literal text={field("ciclo_normativo").text} />{" "}
-          <Provenance unit={field("ciclo_normativo")} />
+        <p className="muted" data-unit-id={fields.ciclo_normativo.unitId}>
+          <Literal text={fields.ciclo_normativo.text} />{" "}
+          <Provenance unit={fields.ciclo_normativo} />
         </p>
       </header>
-      <UnitBlock unit={field("perfil_entrada")} level={2} />
-      <UnitBlock unit={field("perfil_salida")} level={2} />
+      <UnitBlock unit={fields.perfil_entrada} level={2} />
+      <UnitBlock unit={fields.perfil_salida} level={2} />
 
       <section aria-labelledby="prog-nivel">
         <h2 id="prog-nivel" className="section-title">
           Progresión en {level.labelLiteral}
         </h2>
         <div className="stack">
-          {repo.progressionOf(levelId).map((u) => (
+          {data.progression.map((u) => (
             <UnitBlock key={u.unitId} unit={u} heading={u.headerLiteral} />
           ))}
         </div>
@@ -38,21 +36,15 @@ export function LevelScreen({ levelId }: { levelId: LevelId }) {
           Experiencias del año
         </h2>
         <ul className="card-list">
-          {repo.experiencesOf(levelId).map((e) => (
+          {data.experiences.map((e) => (
             <li key={e.code}>
-              <button
-                type="button"
-                className="exp-card exp-card--link"
-                onClick={() => {
-                  navigate({ name: "ficha", code: e.code });
-                }}
-              >
+              <RouteLink to={{ name: "ficha", code: e.code }} className="exp-card exp-card--link">
                 <span className="exp-card__meta">
                   <span className="code">{e.code}</span>
                   <PeriodChip index={e.periodIndex} label={e.periodLiteral} />
                 </span>
-                <span className="exp-card__title">{repo.title(e.code)}</span>
-              </button>
+                <span className="exp-card__title">{e.title.text}</span>
+              </RouteLink>
             </li>
           ))}
         </ul>
@@ -61,21 +53,18 @@ export function LevelScreen({ levelId }: { levelId: LevelId }) {
   );
 }
 
-export function ProgressionScreen() {
-  const { repo } = useApp();
-  const dims = repo.release.dimensions;
+export function ProgressionScreen({ data }: { data: ProgressionData }) {
+  const dims = data.dimensions;
   const [dim, setDim] = useState<DimensionKey>(dims[0]?.key ?? "cognitiva");
-  const cell = (levelId: LevelId, d: DimensionKey) => {
-    const p = repo.release.progression.find((x) => x.levelId === levelId && x.dimensionKey === d);
-    return p ? repo.unit(p.unitId) : undefined;
-  };
+  const cell = (levelId: string, d: DimensionKey) =>
+    data.cells.find((x) => x.levelId === levelId && x.dimensionKey === d)?.unit;
   return (
     <div className="screen">
       <header className="screen__head">
         <h1 className="display">Progresión por dimensión</h1>
         <p className="lead">
-          Cómo avanza cada dimensión del desarrollo de {repo.levels[0]?.labelLiteral} a{" "}
-          {repo.levels.at(-1)?.labelLiteral}.
+          Cómo avanza cada dimensión del desarrollo de {data.levels[0]?.labelLiteral} a{" "}
+          {data.levels.at(-1)?.labelLiteral}.
         </p>
       </header>
       <div className="chip-row" role="group" aria-label="Dimensión">
@@ -97,13 +86,13 @@ export function ProgressionScreen() {
         className="progression"
         aria-label={`Dimensión ${dims.find((d) => d.key === dim)?.headerLiteral ?? ""}`}
       >
-        {repo.levels.map((l) => {
+        {data.levels.map((l) => {
           const u = cell(l.id, dim);
           return (
             <li key={l.id} className="progression__step">
               <span className="progression__level">{l.progresionLabelLiteral}</span>
               {u && (
-                <div className="progression__body">
+                <div className="progression__body" data-unit-id={u.unitId}>
                   <p className="unit__text">
                     <Literal text={u.text} />
                   </p>
@@ -118,9 +107,8 @@ export function ProgressionScreen() {
   );
 }
 
-export function PrinciplesScreen() {
-  const { repo } = useApp();
-  const head = repo.observations[0]?.headerLiteral ?? "";
+export function PrinciplesScreen({ data }: { data: PrinciplesData }) {
+  const head = data.units[0]?.headerLiteral ?? "";
   return (
     <div className="screen">
       <header className="screen__head">
@@ -130,8 +118,8 @@ export function PrinciplesScreen() {
         </p>
       </header>
       <ol className="principles">
-        {repo.observations.map((u) => (
-          <li key={u.unitId} className="principles__item">
+        {data.units.map((u) => (
+          <li key={u.unitId} className="principles__item" data-unit-id={u.unitId}>
             <p>
               <Literal text={u.text} />
             </p>

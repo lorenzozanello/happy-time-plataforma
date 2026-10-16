@@ -1,10 +1,14 @@
-import { useEffect, useRef, type ReactNode } from "react";
-import { useApp } from "./app/state";
-import { tabOf, type Route, type TabName } from "./app/types";
-import { Icon, IconButton, OfflineBanner } from "./components";
-import { HappyAvatar } from "./happy/HappyAvatar";
+import {
+  buildFicha,
+  buildLevel,
+  buildPrinciples,
+  buildProgression,
+} from "../domain/curriculum/views";
+import { useApp, useRepo } from "./app/state";
+import type { Route } from "./app/types";
 import { OnboardingScreen, SignInScreen } from "./screens/Access";
-import { FichaScreen } from "./screens/Ficha";
+import { FichaNotFound, FichaScreen } from "./screens/Ficha";
+import { NotFoundScreen } from "./screens/NotFound";
 import { HappyScreen } from "./screens/Happy";
 import { HomeScreen } from "./screens/Home";
 import { MallaScreen } from "./screens/Malla";
@@ -12,20 +16,11 @@ import { IdentityScreen, ProfileScreen } from "./screens/Profile";
 import { LevelScreen, PrinciplesScreen, ProgressionScreen } from "./screens/Reference";
 import { SavedScreen } from "./screens/Saved";
 import { SearchScreen } from "./screens/Search";
+import { Shell } from "./Shell";
 
-const TABS: { id: TabName; label: string; route: Route; icon: ReactNode }[] = [
-  { id: "home", label: "Inicio", route: { name: "home" }, icon: <Icon name="home" /> },
-  { id: "malla", label: "Malla", route: { name: "malla" }, icon: <Icon name="malla" /> },
-  { id: "happy", label: "Happy", route: { name: "happy" }, icon: <HappyAvatar size={24} /> },
-  { id: "saved", label: "Guardados", route: { name: "saved" }, icon: <Icon name="saved" /> },
-];
-
-/** Identidad de una ruta raíz (pestañas). */
-function routeKey(r: Route): string {
-  return JSON.stringify(r);
-}
-
-function Screen({ route }: { route: Route }) {
+/** Pantallas del prototipo: los modelos de vista se construyen en memoria desde el repositorio. */
+function PrototypeScreen({ route }: { route: Route }) {
+  const repo = useRepo();
   switch (route.name) {
     case "home":
       return <HomeScreen />;
@@ -36,16 +31,20 @@ function Screen({ route }: { route: Route }) {
           {...(route.periodIndex ? { periodIndex: route.periodIndex } : {})}
         />
       );
-    case "ficha":
-      return <FichaScreen code={route.code} />;
+    case "ficha": {
+      const data = buildFicha(repo, route.code);
+      return data ? <FichaScreen data={data} /> : <FichaNotFound />;
+    }
     case "search":
       return <SearchScreen {...(route.q ? { q: route.q } : {})} />;
-    case "level":
-      return <LevelScreen levelId={route.levelId} />;
+    case "level": {
+      const data = buildLevel(repo, route.levelId);
+      return data ? <LevelScreen data={data} /> : <NotFoundScreen />;
+    }
     case "progression":
-      return <ProgressionScreen />;
+      return <ProgressionScreen data={buildProgression(repo)} />;
     case "principles":
-      return <PrinciplesScreen />;
+      return <PrinciplesScreen data={buildPrinciples(repo)} />;
     case "happy":
       return (
         <HappyScreen
@@ -60,87 +59,20 @@ function Screen({ route }: { route: Route }) {
       return <IdentityScreen />;
     case "tools":
       return <ProfileScreen />;
+    case "notFound":
+      return <NotFoundScreen />;
   }
 }
 
+/** Prototipo F2: acceso simulado + armazón + pantallas en memoria. */
 export function App() {
-  const { state, route, visit, navigate, back, canGoBack, online } = useApp();
-  const firstVisit = useRef(true);
-
-  // Tras navegar, el foco va al título de la nueva pantalla (lectores de pantalla y teclado).
-  useEffect(() => {
-    if (firstVisit.current) {
-      firstVisit.current = false;
-      return;
-    }
-    const h1 = document.querySelector<HTMLElement>("main h1");
-    if (h1) {
-      h1.tabIndex = -1;
-      h1.focus({ preventScroll: true });
-    }
-  }, [visit]);
-
+  const { route, visit, state, hydrated } = useApp();
+  if (!hydrated) return null;
   if (!state.session) return <SignInScreen />;
   if (!state.work.onboarded) return <OnboardingScreen />;
-
-  const active = tabOf(route);
-  const isRoot = TABS.some((t) => routeKey(t.route) === routeKey(route));
-
   return (
-    <div className="shell">
-      <a className="skip" href="#main">
-        Saltar al contenido
-      </a>
-      <header className="topbar">
-        <div className="topbar__inner">
-          {canGoBack && !isRoot ? (
-            <IconButton icon="back" label="Volver" onClick={back} />
-          ) : (
-            <span className="brand">
-              <span className="brand__name">Happy Time</span>
-              <span className="brand__sub">Malla curricular</span>
-            </span>
-          )}
-          <div className="topbar__actions">
-            <IconButton
-              icon="search"
-              label="Abrir búsqueda"
-              onClick={() => {
-                navigate({ name: "search" });
-              }}
-            />
-            <IconButton
-              icon="settings"
-              label="Tu perfil"
-              onClick={() => {
-                navigate({ name: "tools" });
-              }}
-            />
-          </div>
-        </div>
-      </header>
-
-      <nav className="tabbar" aria-label="Principal">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            type="button"
-            className={`tabbar__item${active === t.id ? " is-on" : ""}`}
-            aria-current={active === t.id ? "page" : undefined}
-            onClick={() => {
-              navigate(t.route);
-            }}
-          >
-            <span className="tabbar__icon">{t.icon}</span>
-            <span className="tabbar__label">{t.label}</span>
-          </button>
-        ))}
-      </nav>
-
-      <main id="main" className="main" tabIndex={-1}>
-        {!online && <OfflineBanner />}
-        <Screen key={`${route.name}#${String(visit)}`} route={route} />
-      </main>
-    </div>
+    <Shell>
+      <PrototypeScreen key={`${route.name}#${String(visit)}`} route={route} />
+    </Shell>
   );
 }

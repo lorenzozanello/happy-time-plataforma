@@ -1,22 +1,18 @@
 import { EXPERIENCE_FIELDS, type ExperienceFieldKey } from "../../domain/curriculum/fields";
 import { segmentValue, shortHeader } from "../../domain/curriculum/repository";
 import type { Unit } from "../../domain/curriculum/schema";
+import type { FichaData } from "../../domain/curriculum/views";
 import { useApp } from "../app/state";
 import {
-  Button,
   Icon,
   IconButton,
   Literal,
   PeriodChip,
   Provenance,
+  RouteLink,
   UnitBlock,
 } from "../components";
-import {
-  ALERTS_PRINCIPLE_UNIT,
-  COLLAPSIBLE_GROUPS,
-  GROUP_LABEL,
-  OPENING_PRINCIPLE_UNIT,
-} from "../presentation";
+import { COLLAPSIBLE_GROUPS, GROUP_LABEL } from "../presentation";
 
 const MOMENTS: ExperienceFieldKey[] = [
   "momento_indagar",
@@ -35,29 +31,27 @@ const SEGMENT_ROWS = [
 /** Etiqueta corta de un momento a partir de su encabezado literal ("Momento de Indagar" → "Indagar"). */
 const momentName = (header: string) => header.replace(/^Momento de\s+/, "");
 
-export function FichaScreen({ code }: { code: string }) {
-  const { repo, navigate, dispatch, isFavorite, state } = useApp();
-  const exp = repo.maybeExperience(code);
+export function FichaNotFound() {
+  return (
+    <div className="screen">
+      <h1 className="display">Esa experiencia no existe</h1>
+      <p className="lead">
+        No está en la release vigente de la malla. Revisa el código o vuelve a la malla.
+      </p>
+      <RouteLink to={{ name: "malla" }} className="btn btn--primary">
+        Ir a la malla
+      </RouteLink>
+    </div>
+  );
+}
+
+export function FichaScreen({ data }: { data: FichaData }) {
+  const { dispatch, isFavorite, state, catalog, happyEnabled } = useApp();
+  const { experience: exp, level, fields, prev, next } = data;
+  const code = exp.code;
   const principleSeen = state.work.principleSeen ?? false;
-  if (!exp) {
-    return (
-      <div className="screen">
-        <p role="alert">Esa experiencia no existe en la release vigente.</p>
-        <Button
-          onClick={() => {
-            navigate({ name: "malla" });
-          }}
-        >
-          Ir a la malla
-        </Button>
-      </div>
-    );
-  }
-  const f = (k: ExperienceFieldKey) => repo.experienceField(code, k);
-  const level = repo.level(exp.levelId);
+  const f = (k: ExperienceFieldKey) => fields[k];
   const fav = isFavorite({ type: "experience", code });
-  const { prev, next } = repo.neighbors(code);
-  const title = repo.unit(exp.titleUnitId);
 
   return (
     <article className="screen ficha" aria-labelledby="ficha-title">
@@ -66,13 +60,12 @@ export function FichaScreen({ code }: { code: string }) {
           <span className="code">{exp.code}</span>
           <PeriodChip index={exp.periodIndex} label={exp.periodLiteral} />
         </div>
-        <h1 id="ficha-title" className="display ficha__title">
-          {title.text}
+        <h1 id="ficha-title" className="display ficha__title" data-unit-id={exp.title.unitId}>
+          {exp.title.text}
         </h1>
         <p className="ficha__level">
-          {level.labelLiteral} · {repo.levelField(level.id, "equivalencia").text} ·{" "}
-          {repo.levelField(level.id, "edad_entrada").text} a{" "}
-          {repo.levelField(level.id, "edad_salida").text}
+          {level.labelLiteral} · {level.equivalencia.text} · {level.edadEntrada.text} a{" "}
+          {level.edadSalida.text}
         </p>
         <div className="ficha__actions">
           <IconButton
@@ -83,25 +76,25 @@ export function FichaScreen({ code }: { code: string }) {
               dispatch({
                 type: "toggleFavorite",
                 target: { type: "experience", code },
-                release: repo.release.release,
+                release: catalog.release,
               });
             }}
           />
-          <Button
-            variant="primary"
-            onClick={() => {
-              navigate({
+          {happyEnabled && (
+            <RouteLink
+              to={{
                 name: "happy",
                 context: {
                   levelId: exp.levelId,
                   periodIndex: exp.periodIndex,
                   experienceCode: code,
                 },
-              });
-            }}
-          >
-            Pensemos juntas
-          </Button>
+              }}
+              className="btn btn--primary"
+            >
+              Pensemos juntas
+            </RouteLink>
+          )}
         </div>
       </header>
 
@@ -109,12 +102,12 @@ export function FichaScreen({ code }: { code: string }) {
         <aside
           className="principle"
           aria-label="Principio de la malla"
-          data-unit-id={OPENING_PRINCIPLE_UNIT}
+          data-unit-id={data.openingPrinciple.unitId}
         >
           <p>
-            <Literal text={repo.unit(OPENING_PRINCIPLE_UNIT).text} />
+            <Literal text={data.openingPrinciple.text} />
           </p>
-          <Provenance unit={repo.unit(OPENING_PRINCIPLE_UNIT)} />
+          <Provenance unit={data.openingPrinciple} />
           <button
             type="button"
             className="link"
@@ -176,7 +169,7 @@ export function FichaScreen({ code }: { code: string }) {
       </section>
 
       {COLLAPSIBLE_GROUPS.map((g) => {
-        const fields = EXPERIENCE_FIELDS.filter((x) => x.group === g);
+        const groupFields = EXPERIENCE_FIELDS.filter((x) => x.group === g);
         return (
           <details key={g} className="group">
             <summary>
@@ -184,13 +177,9 @@ export function FichaScreen({ code }: { code: string }) {
               <Icon name="chevron" size={18} />
             </summary>
             <div className="group__body">
-              {fields.map((x) =>
+              {groupFields.map((x) =>
                 x.key === "documentacion_alertas" ? (
-                  <Alerts
-                    key={x.key}
-                    unit={f(x.key)}
-                    principle={repo.unit(ALERTS_PRINCIPLE_UNIT)}
-                  />
+                  <Alerts key={x.key} unit={f(x.key)} principle={data.alertsPrinciple} />
                 ) : (
                   <UnitBlock key={x.key} unit={f(x.key)} />
                 ),
@@ -202,33 +191,22 @@ export function FichaScreen({ code }: { code: string }) {
 
       <nav className="ficha__nav" aria-label="Otras experiencias">
         {prev ? (
-          <button
-            type="button"
-            onClick={() => {
-              navigate({ name: "ficha", code: prev.code });
-            }}
-          >
+          <RouteLink to={{ name: "ficha", code: prev.code }} className="ficha__prev">
             <Icon name="back" size={18} />
             <span>
-              <span className="code">{prev.code}</span> {repo.title(prev.code)}
+              <span className="code">{prev.code}</span> {prev.title}
             </span>
-          </button>
+          </RouteLink>
         ) : (
           <span />
         )}
         {next && (
-          <button
-            type="button"
-            className="ficha__next"
-            onClick={() => {
-              navigate({ name: "ficha", code: next.code });
-            }}
-          >
+          <RouteLink to={{ name: "ficha", code: next.code }} className="ficha__next">
             <span>
-              <span className="code">{next.code}</span> {repo.title(next.code)}
+              <span className="code">{next.code}</span> {next.title}
             </span>
             <Icon name="chevron" size={18} />
-          </button>
+          </RouteLink>
         )}
       </nav>
     </article>

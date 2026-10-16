@@ -1,10 +1,10 @@
 /* Happy Time — estilos de interfaz. Todos los colores vienen de tokens (src/ui/theme.ts). */
 
 :root {
-  --font-display: "Fredoka", "Baloo 2", ui-rounded, system-ui, sans-serif;
+  --font-display: var(--face-display, "Fredoka"), "Baloo 2", ui-rounded, system-ui, sans-serif;
   --font-body:
-    "Atkinson Hyperlegible Next", "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI",
-    sans-serif;
+    var(--face-body, "Atkinson Hyperlegible Next"), "Atkinson Hyperlegible", system-ui,
+    -apple-system, "Segoe UI", sans-serif;
   --radius-s: 8px;
   --radius-m: 14px;
   --radius-l: 22px;
@@ -61,6 +61,29 @@ textarea {
 
 button {
   cursor: pointer;
+}
+
+/* La app usa enlaces reales (<a href>) donde el prototipo usa botones: mismo aspecto. */
+a {
+  color: var(--accent);
+}
+
+a:where(
+  .exp-card,
+  .tabbar__item,
+  .icon-btn,
+  .result,
+  .chip,
+  .thread-item,
+  .intent,
+  .btn,
+  .year-item,
+  .ficha__prev,
+  .ficha__next,
+  .search-trigger
+) {
+  color: inherit;
+  text-decoration: none;
 }
 
 :focus-visible {
@@ -793,7 +816,10 @@ mark {
   border-top: 1px solid var(--line);
 }
 
-.link-list button {
+.link-list button,
+.link-list a {
+  color: inherit;
+  text-decoration: none;
   min-height: 56px;
   display: flex;
   align-items: center;
@@ -1126,7 +1152,10 @@ h2.unit__title {
   gap: 8px;
 }
 
-.ficha__nav button {
+.ficha__nav button,
+.ficha__nav a {
+  color: inherit;
+  text-decoration: none;
   min-height: 64px;
   display: flex;
   align-items: center;

@@ -98,3 +98,13 @@ export async function expectFichaLiterals(page: Page, code: string) {
   );
   expect(problems).toEqual([]);
 }
+
+/** Código de acceso del piloto que arranca el servidor de e2e (playwright.app.config.ts). */
+export const HAPPY_ACCESS_CODE = "piloto-e2e-2026";
+
+/** Deja el código del piloto guardado antes de cargar la app (como una docente que ya lo escribió). */
+export async function withHappyAccess(page: Page, code: string = HAPPY_ACCESS_CODE) {
+  await page.addInitScript((c: string) => {
+    window.localStorage.setItem("ht.app.happy.acceso", c);
+  }, code);
+}

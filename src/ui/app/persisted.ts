@@ -4,9 +4,9 @@
  * pieza por pieza y se descarta lo inválido, sin tumbar la app (revisión adversarial F3).
  */
 import { LEVEL_IDS, type LevelId } from "../../domain/curriculum/fields";
-import type { Unit } from "../../domain/curriculum/schema";
 import { catalogExperience, type Catalog } from "../../domain/curriculum/views";
 import { isMode } from "../../domain/happy/modes";
+import { isMetricsShape, isUnitShape } from "../../domain/happy/shape";
 import type {
   Favorite,
   FavoriteTarget,
@@ -105,124 +105,43 @@ function idea(v: unknown): SavedIdea | null {
   };
 }
 
-/** Valida una respuesta de Happy guardada. */
+/** Valida una respuesta de Happy guardada; sin validador (app sin Happy) se descartan los hilos. */
 export type ResponseCheck = (v: unknown) => boolean;
 
-const strs = (v: unknown, max: number) => Array.isArray(v) && v.every((x) => str(x, max));
+/** Lo que ve la docente cuando una respuesta guardada ya no se puede verificar (en vez de perderla sin aviso). */
+export const UNVERIFIED_RESPONSE_MESSAGE =
+  "Esta respuesta era de otra versión de la malla o no se pudo verificar. Pídela de nuevo para verla con la malla vigente.";
 
-/**
- * Forma de una respuesta guardada, sin Zod (para no cargarlo en el navegador): basta para que
- * la interfaz la pinte sin fallar. El contenido ya lo validó el servidor al recibirlo.
- */
-export function looksLikeResponse(v: unknown): boolean {
-  if (!isObj(v) || !isMode(v.mode) || !Array.isArray(v.blocks) || !Array.isArray(v.nextActions))
-    return false;
-  const blockOk = (b: unknown): boolean => {
-    if (!isObj(b)) return false;
-    switch (b.kind) {
-      case "malla_ref":
-        return (
-          str(b.unitId, 80) && str(b.why, 1200) && (b.segment === undefined || str(b.segment, 40))
-        );
-      case "paths":
-        return (
-          Array.isArray(b.paths) &&
-          b.paths.length <= 3 &&
-          b.paths.every((p) => isObj(p) && str(p.title, 160) && str(p.summary, 1200))
-        );
-      case "steps":
-        return str(b.title, 160) && strs(b.items, 1200);
-      case "idea":
-      case "question":
-        return str(b.text, 1200);
-      case "notice":
-        return (
-          str(b.text, 1200) && ["privacy", "out_of_scope", "no_match"].includes(String(b.code))
-        );
-      default:
-        return false;
-    }
-  };
-  const actionOk = (a: unknown) =>
-    isObj(a) &&
-    str(a.id, 40) &&
-    str(a.label, 160) &&
-    ["send", "open_experience", "save_idea"].includes(String(a.kind)) &&
-    (a.payload === undefined || str(a.payload, 400));
-  return v.blocks.length <= 8 && v.blocks.every(blockOk) && v.nextActions.every(actionOk);
-}
-
-const UNIT_KINDS = [
-  "experience_field",
-  "experience_title",
-  "level_field",
-  "observation",
-  "progression",
-] as const;
-
-/**
- * Reconstruye una unidad citada guardada con solo campos válidos (sin confiar en el objeto).
- * Una unidad malformada se descarta: la cita no se pinta, pero la vista no falla.
- * Que sea de la release vigente lo decide la interfaz (las de otra release se marcan).
- */
-function safeUnit(v: unknown): Unit | null {
-  if (!isObj(v) || !str(v.unitId, 100) || !str(v.text, 20_000) || v.text === "") return null;
-  if (!str(v.headerLiteral, 500) || !str(v.fieldKey, 60) || !str(v.release, 40)) return null;
-  if (!UNIT_KINDS.includes(v.kind as (typeof UNIT_KINDS)[number])) return null;
-  const src = v.source;
-  if (!isObj(src) || !str(src.sheet, 100) || !str(src.header, 500)) return null;
-  if (typeof src.cell !== "string" || !/^[A-Z]{1,3}\d{1,4}$/.test(src.cell)) return null;
-  const range =
-    typeof src.range === "string" && /^[A-Z]{1,3}\d{1,4}:[A-Z]{1,3}\d{1,4}$/.test(src.range)
-      ? src.range
-      : undefined;
-  const len = v.text.length;
-  const idx = (x: unknown): x is number =>
-    Number.isInteger(x) && (x as number) >= 0 && (x as number) <= len;
-  const segments = Array.isArray(v.segments)
-    ? v.segments.flatMap((g) =>
-        isObj(g) &&
-        str(g.key, 40) &&
-        str(g.label, 200) &&
-        idx(g.start) &&
-        idx(g.end) &&
-        idx(g.valueStart) &&
-        idx(g.valueEnd) &&
-        g.valueStart <= g.valueEnd
-          ? [
-              {
-                key: g.key,
-                label: g.label,
-                start: g.start,
-                end: g.end,
-                valueStart: g.valueStart,
-                valueEnd: g.valueEnd,
-              },
-            ]
-          : [],
-      )
-    : undefined;
+/** Sustituye una respuesta guardada no verificable por un error con «Reintentar» (revisión F5, N6). */
+export function unverifiedMessage(
+  m: Pick<ThreadMessage, "id" | "createdAt" | "replyTo">,
+): ThreadMessage {
   return {
-    unitId: v.unitId,
-    kind: v.kind as Unit["kind"],
-    fieldKey: v.fieldKey,
-    headerLiteral: v.headerLiteral,
-    text: v.text,
-    source: { sheet: src.sheet, cell: src.cell, header: src.header, ...(range ? { range } : {}) },
-    authority: "official_curriculum",
-    release: v.release,
-    ...(typeof v.levelId === "string" && (LEVEL_IDS as readonly string[]).includes(v.levelId)
-      ? { levelId: v.levelId as LevelId }
-      : {}),
-    ...(str(v.code, 20) ? { code: v.code } : {}),
-    ...(segments?.length ? { segments } : {}),
+    id: m.id,
+    role: "happy",
+    createdAt: m.createdAt,
+    ...(m.replyTo ? { replyTo: m.replyTo } : {}),
+    error: UNVERIFIED_RESPONSE_MESSAGE,
   };
 }
 
-function message(v: unknown, isResponse: ResponseCheck): ThreadMessage | null {
+function message(v: unknown, isResponse: ResponseCheck, release: string): ThreadMessage | null {
   if (!isObj(v) || !str(v.id, 100) || !num(v.createdAt)) return null;
   if (v.role !== "docente" && v.role !== "happy") return null;
-  if (v.response !== undefined && !isResponse(v.response)) return null;
+  const replyTo = str(v.replyTo, 100) ? { replyTo: v.replyTo } : {};
+  const unverified = () =>
+    unverifiedMessage({ id: v.id as string, createdAt: v.createdAt as number, ...replyTo });
+  if (v.response !== undefined && !isResponse(v.response)) return unverified();
+  // Literales citados: forma válida y de la release vigente; uno inválido convierte el mensaje en un
+  // error con reintento (nunca se pinta a medias). La pantalla de Happy además comprueba la huella.
+  const units = arr(v.units);
+  if (
+    v.units !== undefined &&
+    (!Array.isArray(v.units) ||
+      units.length > 40 ||
+      !units.every((u) => isUnitShape(u) && u.release === release))
+  )
+    return unverified();
   return {
     id: v.id,
     role: v.role,
@@ -231,14 +150,8 @@ function message(v: unknown, isResponse: ResponseCheck): ThreadMessage | null {
     ...opt("mode", v.mode, isMode),
     ...opt("replyTo", v.replyTo, (x): x is string => str(x, 100)),
     ...(v.response !== undefined ? { response: v.response as ThreadMessage["response"] } : {}),
-    ...(Array.isArray(v.units)
-      ? {
-          units: v.units.slice(0, 20).flatMap((u) => {
-            const ok = safeUnit(u);
-            return ok ? [ok] : [];
-          }),
-        }
-      : {}),
+    ...(v.units !== undefined ? { units: units as ThreadMessage["units"] } : {}),
+    ...opt("metrics", v.metrics, isMetricsShape),
     ...opt("error", v.error, (x): x is string => str(x, 1000)),
     ...(v.feedback === "up" || v.feedback === "down" ? { feedback: v.feedback } : {}),
   } as ThreadMessage;
@@ -265,7 +178,7 @@ function thread(v: unknown, isResponse: ResponseCheck, catalog: Catalog): Thread
         : {}),
     },
     messages: arr(v.messages).flatMap((m) => {
-      const ok = message(m, isResponse);
+      const ok = message(m, isResponse, catalog.release);
       return ok ? [ok] : [];
     }),
   };
@@ -274,7 +187,7 @@ function thread(v: unknown, isResponse: ResponseCheck, catalog: Catalog): Thread
 export function sanitizeStored(
   raw: unknown,
   catalog: Catalog,
-  isResponse: ResponseCheck = looksLikeResponse,
+  isResponse?: ResponseCheck,
 ): AppState {
   if (!isObj(raw)) return EMPTY;
   const keep = <T>(items: unknown, fn: (v: unknown) => T | null): T[] =>
@@ -290,6 +203,8 @@ export function sanitizeStored(
     recentSearches: arr(raw.recentSearches)
       .filter((x): x is string => str(x, 120) && x.trim() !== "")
       .slice(0, 8),
-    threads: keep(raw.threads, (t) => thread(t, isResponse, catalog)).slice(0, 30),
+    threads: isResponse
+      ? keep(raw.threads, (t) => thread(t, isResponse, catalog)).slice(0, 30)
+      : [],
   };
 }

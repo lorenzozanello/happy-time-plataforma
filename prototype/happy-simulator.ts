@@ -50,15 +50,17 @@ export function createHappySimulator(
         allowedModes: V1_MODES,
       });
       if (!check.ok) throw new Error(`Respuesta inválida: ${check.errors.join("; ")}`);
-      // Como el servidor: cada cita viaja con su unidad literal de la release compilada.
-      const unitsOf = (blocks: Block[]) =>
-        blocks.flatMap((b) => (b.kind === "malla_ref" ? [repo.unit(b.unitId)] : []));
+      const units = full.blocks.flatMap((b) =>
+        b.kind === "malla_ref" ? [repo.unit(b.unitId)] : [],
+      );
       for (let i = 1; i <= full.blocks.length; i++) {
-        const blocks = full.blocks.slice(0, i);
-        onProgress({ response: { ...full, blocks, nextActions: [] }, units: unitsOf(blocks) });
+        onProgress({
+          response: { ...full, blocks: full.blocks.slice(0, i), nextActions: [] },
+          units,
+        });
         if (i < full.blocks.length) await sleep(controls.blockDelay);
       }
-      return { response: full, units: unitsOf(full.blocks) };
+      return { response: full, units };
     },
   };
 }

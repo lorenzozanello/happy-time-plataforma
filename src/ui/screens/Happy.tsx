@@ -1,14 +1,18 @@
-import { useEffect, useRef, useState } from "react";
-import { shortHeader } from "../../domain/curriculum/repository";
-import { checkPrivacy, PRIVACY_MESSAGE } from "../../domain/happy/privacy";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { unitFingerprint } from "../../domain/curriculum/fingerprint";
+import { shortHeader, type CurriculumRepository } from "../../domain/curriculum/repository";
 import type { Unit } from "../../domain/curriculum/schema";
 import { catalogExperience, catalogLevel } from "../../domain/curriculum/views";
+import type { HistoryTurn } from "../../domain/happy/prompt";
+import { checkPrivacy, PRIVACY_MESSAGE } from "../../domain/happy/privacy";
 import type { Block, HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
+import { summarizeResponse } from "../../domain/happy/shape";
+import { unverifiedMessage } from "../app/persisted";
 import { newId, now, useApp } from "../app/state";
 import {
-  HappyUserError,
-  type HappyReply,
-  type HappyTurn,
+  HappyError,
+  type HappyPartial,
+  type HappyStatus,
   type Thread,
   type ThreadMessage,
 } from "../app/types";
@@ -17,27 +21,6 @@ import { HappyAvatar, HappyLockup, type HappyState } from "../happy/HappyAvatar"
 import { ROMAN } from "../presentation";
 import { INTENTS } from "./Home";
 import { HappyComingSoon } from "./HappySoon";
-
-/** Memoria por hilo (§8.7): los últimos turnos, la docente redactada y Happy resumida. */
-function historyOf(messages: ThreadMessage[]): HappyTurn[] {
-  const turns: HappyTurn[] = [];
-  for (const m of messages.slice(-6)) {
-    if (m.role === "docente" && m.text) turns.push({ role: "docente", text: m.text.slice(0, 600) });
-    else if (m.response) {
-      const parts = m.response.blocks.flatMap((b) =>
-        b.kind === "paths"
-          ? b.paths.map((p) => `camino «${p.title}»`)
-          : b.kind === "malla_ref"
-            ? [`cita ${b.unitId}`]
-            : b.kind === "steps"
-              ? [`pasos «${b.title}»`]
-              : [b.text.slice(0, 120)],
-      );
-      turns.push({ role: "happy", text: parts.join("; ").slice(0, 600) });
-    }
-  }
-  return turns;
-}
 
 const PLACEHOLDER: Record<Mode, string> = {
   explorar: "Cuéntame qué buscas, o pide ideas para la experiencia elegida",
@@ -53,35 +36,230 @@ interface HappyProps {
   threadId?: string;
   mode?: Mode;
   context?: HappyContext;
+  /**
+   * Huellas `unitId → textHash` de la release (solo en la app; el prototipo tiene el repositorio).
+   * Todo literal que llegue del almacenamiento o de la red se comprueba contra ellas antes de
+   * pintarse como «Desde nuestra malla…» (revisión adversarial F5, A2).
+   */
+  unitHashes?: Record<string, string>;
 }
 
 export function HappyScreen(props: HappyProps) {
-  const { happyEnabled, happyPending, hydrated } = useApp();
-  // El hilo y la disponibilidad se conocen al leer el navegador y preguntar al servidor.
-  if (!hydrated || happyPending)
-    return (
-      <div className="screen" aria-busy="true" aria-label="Cargando Happy">
-        <HappyLockup size={48} />
-        <Skeleton lines={3} />
-      </div>
-    );
+  const { happyEnabled, services } = useApp();
   if (!happyEnabled) return <HappyComingSoon />;
+  if (services.happyAccess) return <HappyGate {...props} />;
   return <HappyChat {...props} />;
 }
 
-function HappyChat({ threadId, mode: initialMode, context: initialContext }: HappyProps) {
+/** Hasta F4: comprueba si Happy está habilitada y pide el código de acceso del piloto una vez. */
+function HappyGate(props: HappyProps) {
+  const { services } = useApp();
+  const access = services.happyAccess;
+  const [status, setStatus] = useState<{
+    attempt: number;
+    value: HappyStatus | "loading" | "error";
+  }>({
+    attempt: 0,
+    value: "loading",
+  });
+  const [attempt, setAttemptState] = useState(0);
+  const [justOpened, setJustOpened] = useState(false);
+  const setAttempt = (fn: (n: number) => number) => {
+    setAttemptState(fn);
+  };
+  // Al cambiar el intento, el estado vuelve a «cargando» en el mismo render (sin setState en efecto).
+  let current: HappyStatus | "loading" | "error" = status.value;
+  if (status.attempt !== attempt) current = "loading";
+  useEffect(() => {
+    let alive = true;
+    access
+      ?.status()
+      .then((s) => {
+        if (alive) setStatus({ attempt, value: s });
+      })
+      .catch(() => {
+        if (alive) setStatus({ attempt, value: "error" });
+      });
+    return () => {
+      alive = false;
+    };
+  }, [access, attempt]);
+
+  const view = current;
+  if (view === "loading")
+    return (
+      <div className="screen happy" aria-busy="true">
+        <header className="happy__head">
+          <HappyLockup size={48} />
+        </header>
+        <Skeleton lines={4} />
+      </div>
+    );
+  if (view === "error")
+    return (
+      <div className="screen happy">
+        <header className="happy__head">
+          <HappyLockup size={48} />
+        </header>
+        <ErrorState
+          message="No pudimos comprobar si Happy está disponible. Revisa tu conexión."
+          onRetry={() => {
+            setAttempt((n) => n + 1);
+          }}
+        />
+      </div>
+    );
+  if (!view.enabled) return <HappyComingSoon />;
+  if (view.needsCode && !view.hasCode)
+    return (
+      <AccessCodeForm
+        onSaved={() => {
+          setJustOpened(true);
+          setAttempt((n) => n + 1);
+        }}
+      />
+    );
+  return (
+    <HappyChat
+      {...props}
+      focusComposer={justOpened}
+      onAccessDenied={() => {
+        setStatus({ attempt, value: { ...view, hasCode: false } });
+      }}
+    />
+  );
+}
+
+export function AccessCodeForm({ onSaved, message }: { onSaved: () => void; message?: string }) {
+  const { services } = useApp();
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(message ?? null);
+  return (
+    <div className="screen happy">
+      <header className="screen__head">
+        <HappyLockup size={48} state="escucha" />
+        <h1 className="display">Código de acceso</h1>
+        <p className="lead">
+          Durante el piloto, Happy se abre con el código que te compartió la coordinación. Se guarda
+          en este teléfono; solo lo escribes una vez.
+        </p>
+      </header>
+      <form
+        className="form"
+        noValidate
+        onSubmit={(e) => {
+          e.preventDefault();
+          const v = code.trim();
+          if (v.length < 4) {
+            setError("Escribe el código completo.");
+            return;
+          }
+          services.happyAccess?.setCode(v);
+          onSaved();
+        }}
+      >
+        <label htmlFor="happy-code">Código del piloto</label>
+        <input
+          id="happy-code"
+          type="text"
+          inputMode="text"
+          autoComplete="off"
+          autoCapitalize="off"
+          autoFocus
+          value={code}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "happy-code-error" : undefined}
+          onChange={(e) => {
+            setCode(e.target.value);
+            setError(null);
+          }}
+        />
+        {error && (
+          <p id="happy-code-error" className="form__error" role="alert">
+            {error}
+          </p>
+        )}
+        <Button type="submit" variant="primary">
+          Abrir Happy
+        </Button>
+      </form>
+    </div>
+  );
+}
+
+function historyOf(thread: Thread | undefined): HistoryTurn[] {
+  if (!thread) return [];
+  return thread.messages
+    .flatMap((m): HistoryTurn[] => {
+      if (m.role === "docente" && m.text) return [{ role: "docente", text: m.text }];
+      if (m.role === "happy" && m.response)
+        return [{ role: "happy", text: summarizeResponse(m.response) }];
+      return [];
+    })
+    .slice(-6);
+}
+
+/** Un literal solo se acepta si su huella coincide con la de la release (o si hay repositorio). */
+function makeVerifier(
+  unitHashes: Record<string, string> | undefined,
+  repo: CurriculumRepository | undefined,
+): (u: Unit) => boolean {
+  if (unitHashes) return (u) => unitHashes[u.unitId] === unitFingerprint(u);
+  if (repo)
+    return (u) => {
+      const real = repo.maybeUnit(u.unitId);
+      return real !== undefined && unitFingerprint(real) === unitFingerprint(u);
+    };
+  return () => false;
+}
+
+/**
+ * Las respuestas guardadas cuyos literales no pasan la verificación se muestran como un error con
+ * «Reintentar» (nunca a medias ni en silencio).
+ */
+function verifiedThread(t: Thread | undefined, verify: (u: Unit) => boolean): Thread | undefined {
+  if (!t) return undefined;
+  const messages = t.messages.map((m) =>
+    !m.units || m.units.every(verify) ? m : unverifiedMessage(m),
+  );
+  return messages.some((m, i) => m !== t.messages[i]) ? { ...t, messages } : t;
+}
+
+function HappyChat({
+  threadId,
+  mode: initialMode,
+  context: initialContext,
+  unitHashes,
+  focusComposer = false,
+  onAccessDenied,
+}: HappyProps & { focusComposer?: boolean; onAccessDenied?: () => void }) {
   const app = useApp();
-  const { state, navigate, replace, dispatch, services, online, catalog } = app;
-  const existing = threadId ? state.threads.find((t) => t.id === threadId) : undefined;
+  const { state, catalog, navigate, replace, dispatch, services, online, repo } = app;
+  const verify = useMemo(() => makeVerifier(unitHashes, repo), [unitHashes, repo]);
+  const existing = verifiedThread(
+    threadId ? state.threads.find((t) => t.id === threadId) : undefined,
+    verify,
+  );
+  // Un código de experiencia en la URL solo vale si existe en el catálogo (revisión F5, B5).
+  const safeInitial: HappyContext | undefined =
+    initialContext?.experienceCode && !catalogExperience(catalog, initialContext.experienceCode)
+      ? Object.fromEntries(Object.entries(initialContext).filter(([k]) => k !== "experienceCode"))
+      : initialContext;
   const [thread, setThread] = useState<Thread | undefined>(existing);
   const [mode, setMode] = useState<Mode | undefined>(existing?.mode ?? initialMode);
-  const [context, setContext] = useState<HappyContext>(existing?.context ?? initialContext ?? {});
+  const [context, setContext] = useState<HappyContext>(existing?.context ?? safeInitial ?? {});
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [phase, setPhase] = useState<"idle" | "thinking" | "streaming" | "done">("idle");
-  const [partial, setPartial] = useState<HappyReply | null>(null);
+  const [partial, setPartial] = useState<HappyPartial | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (focusComposer) input.current?.focus();
+  }, [focusComposer]);
 
   const avatarState: HappyState =
     phase === "thinking"
@@ -139,8 +317,8 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
     const raw = text.trim();
     if (!raw || phase === "thinking" || phase === "streaming") return;
     setMode(m);
-    // Política de entrada (ADR-009): solo se guarda la versión redactada; si identifica a una
-    // persona, no se envía a Happy y se pide reformular.
+    // Política de entrada (ADR-009/014): solo se guarda la versión redactada; si identifica a una
+    // persona, no se envía a Happy y se pide reformular. El servidor repite la comprobación.
     const privacy = checkPrivacy(raw);
     const stored = privacy.redacted;
     const userMsg: ThreadMessage = {
@@ -183,14 +361,23 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
     persist(current);
     setPhase("thinking"); // feedback local inmediato (<150 ms)
     setPartial(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
-      const reply = await services.happy.respond(
-        { mode: m, message: raw, context, history: historyOf(base.messages) },
+      const result = await services.happy.respond(
+        { mode: m, message: raw, context, history: historyOf(from), signal: controller.signal },
         (p) => {
+          // Tras un «reset» del servidor llegan 0 bloques: se vuelve al esqueleto de «piensa».
+          if (p.response.blocks.length === 0) {
+            setPhase("thinking");
+            setPartial(null);
+            return;
+          }
           setPhase("streaming");
-          setPartial(p);
+          setPartial({ response: p.response, units: p.units.filter(verify) });
         },
       );
+      if (!result.units.every(verify)) throw new HappyError("invalid", "Respuesta no verificable.");
       current = {
         ...current,
         messages: [
@@ -199,8 +386,9 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
             id: newId(),
             role: "happy",
             replyTo: userMsg.id,
-            response: reply.response,
-            units: reply.units,
+            response: result.response,
+            units: result.units,
+            ...(result.metrics ? { metrics: result.metrics } : {}),
             createdAt: now(),
           },
         ],
@@ -210,6 +398,14 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
       setPartial(null);
       setPhase("done");
     } catch (e) {
+      const err = e instanceof HappyError ? e : undefined;
+      if (err?.code === "access") {
+        // El código del piloto no sirve: se pide de nuevo; el mensaje queda guardado.
+        setPartial(null);
+        setPhase("idle");
+        onAccessDenied?.();
+        return;
+      }
       current = {
         ...current,
         messages: [
@@ -219,8 +415,11 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
             role: "happy",
             replyTo: userMsg.id,
             error:
-              e instanceof HappyUserError
-                ? `${e.message} Tu mensaje quedó guardado.`
+              err?.code === "limit" ||
+              err?.code === "disabled" ||
+              err?.code === "cancelled" ||
+              err?.code === "timeout"
+                ? err.message
                 : "Happy no pudo responder esta vez. Tu mensaje quedó guardado; vuelve a intentarlo.",
             createdAt: now(),
           },
@@ -229,8 +428,16 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
       persist(current);
       setPartial(null);
       setPhase("idle");
+      // El botón «Cancelar» desaparece: el foco vuelve al compositor (revisión F5, N7).
+      if (err?.code === "cancelled") requestAnimationFrame(() => input.current?.focus());
+    } finally {
+      abortRef.current = null;
     }
   }
+
+  const cancel = () => {
+    abortRef.current?.abort();
+  };
 
   /** Reintenta el mensaje que falló (solo el último error), con el modo con que se envió. */
   const retry = (errorId: string) => {
@@ -359,7 +566,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
       )}
 
       {started && thread && (
-        <div className="conversation" aria-live="polite">
+        <div className="conversation">
           {thread.messages.map((m) =>
             m.role === "docente" ? (
               <p key={m.id} className="bubble bubble--docente">
@@ -382,6 +589,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
                 key={m.id}
                 response={m.response}
                 units={m.units ?? []}
+                metrics={m.metrics}
                 feedback={m.feedback}
                 onFeedback={(v) => {
                   setFeedback(m.id, v);
@@ -391,6 +599,12 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
                   if (a.kind === "open_experience" && a.payload)
                     navigate({ name: "ficha", code: a.payload });
                   else if (a.kind === "send" && a.payload) void send(a.payload, "aterrizar");
+                  else if (a.kind === "save_idea") {
+                    const steps = m.response?.blocks.find((b) => b.kind === "steps");
+                    if (steps && m.response)
+                      saveIdea(steps.title, steps.items.join("\n"), m.response);
+                    else setToast("Guarda un camino o unos pasos desde su botón «Guardar idea».");
+                  }
                 }}
                 onLand={(title) => {
                   void send(`Quiero aterrizar el camino «${title}»`, "aterrizar");
@@ -420,7 +634,7 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
         </label>
         <textarea
           id="happy-input"
-          maxLength={2000}
+          ref={input}
           rows={2}
           value={draft}
           disabled={!online}
@@ -445,14 +659,25 @@ function HappyChat({ threadId, mode: initialMode, context: initialContext }: Hap
             }
           }}
         />
-        <button
-          type="submit"
-          className="composer__send"
-          aria-label="Enviar"
-          disabled={!draft.trim() || busy || !online}
-        >
-          <Icon name="send" />
-        </button>
+        {busy ? (
+          <button
+            type="button"
+            className="composer__send composer__send--cancel"
+            aria-label="Cancelar"
+            onClick={cancel}
+          >
+            <Icon name="close" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="composer__send"
+            aria-label="Enviar"
+            disabled={!draft.trim() || !online}
+          >
+            <Icon name="send" />
+          </button>
+        )}
       </form>
       {toast && (
         <div className="toast" role="status">
@@ -530,9 +755,17 @@ function ThreadList({ threads, onOpen }: { threads: Thread[]; onOpen: (id: strin
   );
 }
 
+const fmtSeconds = (ms: number) =>
+  `${(ms / 1000).toLocaleString("es-CO", { maximumFractionDigits: 1 })} s`;
+const fmtUsd = (usd: number) =>
+  usd === 0
+    ? "sin costo"
+    : `US$${usd.toLocaleString("es-CO", { minimumFractionDigits: 3, maximumFractionDigits: 4 })}`;
+
 export function ResponseView({
   response,
   units,
+  metrics,
   pending = false,
   feedback,
   onFeedback,
@@ -541,8 +774,9 @@ export function ResponseView({
   onLand,
 }: {
   response: HappyResponse;
-  /** Unidades citadas con su literal (del servidor o del repositorio del prototipo). */
+  /** Literales de las unidades citadas (en producción llegan con la respuesta). */
   units: Unit[];
+  metrics?: ThreadMessage["metrics"] | undefined;
   pending?: boolean;
   feedback?: "up" | "down" | undefined;
   onFeedback?: (v: "up" | "down") => void;
@@ -550,14 +784,18 @@ export function ResponseView({
   onAction?: (a: HappyResponse["nextActions"][number]) => void;
   onLand?: (title: string) => void;
 }) {
+  const { repo } = useApp();
+  // `units` ya vienen verificadas por quien las pasa; el repositorio (prototipo) es la propia fuente.
+  const byId = useMemo(() => new Map(units.map((u) => [u.unitId, u])), [units]);
+  const resolve = (id: string): Unit | undefined => byId.get(id) ?? repo?.maybeUnit(id);
   return (
     <div className={`response${pending ? " response--pending" : ""}`}>
       {response.blocks.map((b, i) => (
         <BlockView
           key={i}
           block={b}
+          unit={b.kind === "malla_ref" ? resolve(b.unitId) : undefined}
           response={response}
-          units={units}
           onSaveIdea={onSaveIdea}
           onLand={onLand}
         />
@@ -596,6 +834,12 @@ export function ResponseView({
               onFeedback("down");
             }}
           />
+          {metrics && metrics.provider !== "policy" && (
+            <span className="metrics muted" data-testid="metrics">
+              {metrics.firstBlockMs !== null ? `${fmtSeconds(metrics.firstBlockMs)} · ` : ""}
+              {fmtUsd(metrics.costUsd)}
+            </span>
+          )}
         </div>
       )}
     </div>
@@ -604,39 +848,31 @@ export function ResponseView({
 
 function BlockView({
   block,
+  unit,
   response,
-  units,
   onSaveIdea,
   onLand,
 }: {
   block: Block;
+  unit: Unit | undefined;
   response: HappyResponse;
-  units: Unit[];
   onSaveIdea?: ((title: string, text: string, r: HappyResponse) => void) | undefined;
   onLand?: ((title: string) => void) | undefined;
 }) {
-  const { navigate, catalog, repo } = useApp();
+  const { navigate, catalog } = useApp();
   switch (block.kind) {
     case "malla_ref": {
-      // Literal resuelto por el servidor (o por el repositorio en el prototipo); nunca del modelo.
-      const u = units.find((x) => x.unitId === block.unitId) ?? repo?.maybeUnit(block.unitId);
-      if (!u) return null; // el validador ya lo impide; defensa adicional
-      // Una cita guardada de otra release de la malla no se presenta como la malla vigente.
-      const stale = u.release !== catalog.release;
+      const u = unit;
+      if (!u) return null; // el validador y el servidor ya lo impiden; defensa adicional
       const seg = block.segment ? u.segments?.find((s) => s.key === block.segment) : undefined;
       const text = seg ? u.text.slice(seg.valueStart, seg.valueEnd) : u.text;
       const segLabel = seg?.label;
+      const title = u.code ? catalogExperience(catalog, u.code)?.title.text : undefined;
       return (
-        <section
-          className={`block block--malla${stale ? " block--stale" : ""}`}
-          data-unit-id={u.unitId}
-        >
-          <p className="block__label">
-            {stale ? `De una versión anterior de la malla (${u.release})` : "Desde nuestra malla…"}
-          </p>
+        <section className="block block--malla" data-unit-id={u.unitId}>
+          <p className="block__label">Desde nuestra malla…</p>
           <p className="block__where">
-            {u.code && <span className="code">{u.code}</span>}{" "}
-            {u.code ? (catalogExperience(catalog, u.code)?.title.text ?? "") : ""} ·{" "}
+            {u.code && <span className="code">{u.code}</span>} {title ?? ""} ·{" "}
             {shortHeader(u.headerLiteral)}
             {segLabel && ` · ${segLabel} (fragmento)`}
           </p>

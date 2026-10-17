@@ -160,7 +160,7 @@ describe("F3 · datos del navegador no confiables", () => {
     expect(s.favorites.map((f) => f.id)).toEqual(["1"]);
     expect(s.ideas).toEqual([]);
     expect(s.recentSearches).toEqual(["rimas"]);
-    expect(s.threads.map((t) => t.id)).toEqual(["t"]); // hilo válido sin mensajes
+    expect(s.threads).toEqual([]); // sin validador de respuestas (app sin Happy) no se cargan hilos
   });
 
   it("cualquier valor raro produce un estado vacío utilizable", () => {
@@ -171,7 +171,7 @@ describe("F3 · datos del navegador no confiables", () => {
     }
   });
 
-  it("con validador conserva hilos válidos y descarta respuestas inválidas", () => {
+  it("con validador conserva hilos válidos y convierte respuestas inválidas en error", () => {
     const s = sanitizeStored(
       {
         threads: [
@@ -194,6 +194,12 @@ describe("F3 · datos del navegador no confiables", () => {
     );
     expect(s.threads).toHaveLength(1);
     expect(s.threads[0]?.context).toEqual({ experienceCode: "S2.1", periodIndex: 2 });
-    expect(s.threads[0]?.messages.map((m) => m.id)).toEqual(["m1"]);
+    // La respuesta inválida no desaparece en silencio: queda como error con «Reintentar».
+    expect(s.threads[0]?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+    expect(s.threads[0]?.messages[1]).toMatchObject({
+      role: "happy",
+      error: expect.stringContaining("verificar") as string,
+    });
+    expect(s.threads[0]?.messages[1]?.response).toBeUndefined();
   });
 });

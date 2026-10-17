@@ -1,19 +1,28 @@
 # CHANGELOG — Happy Time
 
-## [F5] 2026-10-16 — Happy núcleo (sin proveedor conectado)
-### Agregado
-- Pipeline de Happy en el servidor: política de entrada, contexto, router, recuperación determinista, prompt v1 versionado, composer de Claude (streaming y caché de prompt) y de guion, validación por bloque y streaming NDJSON.
-- `/api/happy`: apagada por defecto, mismo origen, límites de cuerpo, por IP y por día; disponibilidad en tiempo de ejecución.
-- Happy en la app sin la malla en el navegador: el servidor envía cada cita con su literal.
-- Suite de evaluación de 48 escenarios con criterios duros automáticos y juez independiente; `npm run happy:eval` genera un informe con métricas y rúbrica.
-- e2e de Happy contra `next start` con el composer de guion.
+## [F5] 2026-10-16 — Happy núcleo (PR #5, reemplaza la implementación del PR #4)
 
-### Corregido (revisión adversarial independiente)
-- Reglas de salida ampliadas (autoridad en voz pasiva y con sujetos institucionales, diagnósticos, etiquetas, notas en letras y desempeño cualitativo) y revisión de frases partidas entre campos.
-- Copia literal detectada sin importar tildes, NFD, invisibles, homoglifos o ancho completo; unidades cortas incluidas.
-- Detector de privacidad: teléfonos con separadores e indicativo, dígitos de ancho completo, «número», @usuario y cruces de calles.
-- Sin avisos de privacidad falsos por respuestas previas de Happy; límites que no dependen de `X-Forwarded-For`; tope diario por IP.
-- Datos guardados reconstruidos campo a campo; citas de otra release marcadas; errores del servidor visibles; registro también en abortos y respuestas parciales.
+### Reemplazado
+- El núcleo de `src/server/happy/` del PR #4 se retira en favor de `src/domain/happy/` (ADR-018). Se conservan sus mejoras del detector de privacidad y la comprobación de código solo de servidor en el bundle.
+
+### Agregado
+- `/api/happy`: Claude API con salida estructurada, caché de prompt (bloque estable 1 h + nivel/experiencia 5 min), streaming por bloques (NDJSON) y validación por bloque en el servidor; cita por referencia de punta a punta (el servidor entrega solo los literales citados, con procedencia).
+- Pipeline de dominio reutilizable (`src/domain/happy/`): recuperación determinista, composer con prompt versionado (`happy-system-v1`), lector incremental de JSON, reglas de texto sin dependencias, costo y límites; adaptador de Claude API y modelo falso determinista para CI, e2e y suite sin clave.
+- Happy real en la app: código de acceso del piloto, dispositivo firmado, bloques parciales, estados del avatar ligados al stream, botón «Cancelar», tiempos máximos, métricas por respuesta (latencia y costo), hilos con sus literales verificados por release y huella.
+- Suite de evaluación de 85 escenarios (`evals/happy/scenarios.v1.json`) con criterios duros sobre lo mostrado y sobre la salida cruda del modelo, rúbrica por juez y métricas; `npm run happy:eval` en CI con el modelo falso; workflow manual `happy-eval` con el modelo real.
+- 68 pruebas unitarias nuevas (reglas, pipeline, lector, costo, límites, persistencia) y 16 escenarios e2e × 2 proyectos.
+- `docs/GATE0_LOG.md`: registro de huellas de cada Excel recibido (la exportación `_3` es equivalente a la release 2026-06).
+
+### Corregido (dos revisiones adversariales independientes)
+- La suite evaluaba la respuesta ya filtrada: ahora mide la salida cruda del modelo y cuenta los descartes.
+- Un hilo alterado o de otra release en el navegador podía mostrar un literal falso como malla: huella por unidad (texto + procedencia) y release vigente; lo no verificable se muestra como error con «Reintentar».
+- La conversación previa enviada por el cliente no pasaba por la política de privacidad; nombres con caracteres invisibles la evadían.
+- Límites evadibles rotando cabeceras; ahora dispositivo firmado + IP (con topes propios).
+- Validador: primero con huecos (frases de autoridad y diagnóstico que pasaban, `payload` sin validar, copia con invisibles) y después con falsos positivos sobre vocabulario de inclusión; reescrito por precisión con corpus de pruebas.
+- Precio desconocido estimaba costo 0 (tope inoperante); cliente sin timeout ni cancelación; motivos de descarte con texto; foco y `aria-live`; URL con experiencia inválida; secreto expuesto a `npm ci`; juez manipulable.
+
+### Decisiones
+- ADR-016 (hosting sin costo), ADR-017 (implementación de Happy núcleo); ADR-003, ADR-005 y ADR-008 actualizados con las respuestas del owner.
 
 ## [F3] 2026-10-16 — Malla en producción (Next.js)
 ### Agregado

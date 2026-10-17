@@ -1,6 +1,7 @@
 "use client";
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { Catalog, SearchBundle } from "../../src/domain/curriculum/views";
+import { isTrustedResponseShape } from "../../src/domain/happy/shape";
 import { Shell } from "../../src/ui/Shell";
 import { AppProvider } from "../../src/ui/app/state";
 import { useNextNavigation } from "./navigation";
@@ -20,22 +21,6 @@ export function Providers({
 }) {
   const navigation = useNextNavigation(catalog);
   const services = useMemo(() => createAppServices(), []);
-  // Happy depende de la configuración del servidor en tiempo de ejecución (no del build).
-  const [happy, setHappy] = useState<boolean | null>(null);
-  useEffect(() => {
-    let alive = true;
-    fetch("/api/happy", { cache: "no-store" })
-      .then((r) => (r.ok ? (r.json() as Promise<{ disponible?: boolean }>) : null))
-      .then((s) => {
-        if (alive) setHappy(s?.disponible === true);
-      })
-      .catch(() => {
-        if (alive) setHappy(false); // sin respuesta: Happy queda como «llega pronto»
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
   const loadSearch = useMemo(() => {
     let pending: Promise<SearchBundle> | undefined;
     return () => {
@@ -59,8 +44,8 @@ export function Providers({
       services={services}
       navigation={navigation}
       storageKey={STORAGE_KEY}
-      happyEnabled={happy === true}
-      happyPending={happy === null}
+      happyEnabled
+      checkResponse={isTrustedResponseShape}
     >
       <Shell>{children}</Shell>
     </AppProvider>

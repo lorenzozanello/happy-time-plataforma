@@ -123,10 +123,8 @@ interface AppApi {
   canGoBack: boolean;
   /** La navegación usa URLs reales (enlaces <a>) o es interna (prototipo). */
   urls: boolean;
-  /** Happy disponible en este despliegue (la app lo pregunta al servidor al cargar). */
+  /** Happy disponible en este despliegue (en F3 la app de producción aún no la incluye). */
   happyEnabled: boolean;
-  /** Aún no se sabe si Happy está disponible. */
-  happyPending: boolean;
   online: boolean;
   isFavorite: (t: FavoriteTarget) => boolean;
 }
@@ -141,7 +139,6 @@ export function AppProvider({
   navigation,
   storageKey = "ht.prototipo.v1",
   happyEnabled = true,
-  happyPending = false,
   checkResponse,
   children,
 }: {
@@ -153,8 +150,7 @@ export function AppProvider({
   /** Clave del almacenamiento del navegador (el prototipo y la app no comparten datos). */
   storageKey?: string;
   happyEnabled?: boolean;
-  happyPending?: boolean;
-  /** Valida respuestas de Happy guardadas (por omisión, una revisión de forma sin Zod). */
+  /** Valida respuestas de Happy guardadas (sin él, los hilos guardados se descartan). */
   checkResponse?: ResponseCheck;
   children: ReactNode;
 }) {
@@ -230,7 +226,6 @@ export function AppProvider({
     canGoBack: navigation.canGoBack,
     urls: navigation.urls,
     happyEnabled,
-    happyPending,
     online,
     isFavorite: (t) => favSet.has(favoriteKey(t)),
   };

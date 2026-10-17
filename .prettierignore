@@ -6,3 +6,4 @@ docs
 dist
 test-results
 playwright-report
+evals/happy/reports/

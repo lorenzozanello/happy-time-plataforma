@@ -4,7 +4,7 @@ Plataforma para que las docentes de educación inicial de Happy Time exploren la
 
 ## Estado
 
-Ver [`docs/EXECUTION_STATUS.md`](docs/EXECUTION_STATUS.md). Arquitectura y producto: [`docs/ARCHITECTURE_BASELINE_v1.md`](docs/ARCHITECTURE_BASELINE_v1.md).
+Ver [`docs/EXECUTION_STATUS.md`](docs/EXECUTION_STATUS.md). Arquitectura y producto: [`docs/ARCHITECTURE_BASELINE_v1.md`](docs/ARCHITECTURE_BASELINE_v1.md). Decisiones: [`docs/DECISIONS.md`](docs/DECISIONS.md). Huellas de cada Excel recibido: [`docs/GATE0_LOG.md`](docs/GATE0_LOG.md).
 
 ## Fuente curricular
 
@@ -39,24 +39,31 @@ npm run app:check-bundle   # la malla completa no viaja al navegador
 npm run test:e2e:app       # e2e contra next start (URLs, fidelidad, axe, seguridad, LCP)
 ```
 
-### Happy (asistente)
+### Happy (F5)
 
-Apagada por defecto. Variables del servidor:
+Happy corre en `/api/happy` con Claude API. Sin clave, o con `HAPPY_MODEL=fake`, responde el modelo
+falso determinista (CI, e2e y pruebas locales). Variables de entorno:
 
-| Variable                                                                            | Uso                                                                     |
-| ----------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| `HAPPY_ENABLED=1`                                                                   | Enciende `/api/happy` (no hacerlo en un despliegue público antes de F4) |
-| `ANTHROPIC_API_KEY`                                                                 | Clave del proveedor (solo servidor)                                     |
-| `HAPPY_MODEL`                                                                       | Modelo (predeterminado `claude-sonnet-5-5`)                             |
-| `HAPPY_IP_LIMIT`, `HAPPY_IP_WINDOW_MS`, `HAPPY_IP_DAILY_LIMIT`, `HAPPY_DAILY_LIMIT` | Límites de mejor esfuerzo                                               |
-| `HAPPY_TRUST_XFF=1`                                                                 | Solo detrás de un proxy propio que reescribe `X-Forwarded-For`          |
+| Variable                                              | Qué hace                                                                     | Por defecto                            |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------- | -------------------------------------- |
+| `ANTHROPIC_API_KEY`                                   | Clave de Claude API (solo en el servidor y en los secretos de Actions)       | —                                      |
+| `HAPPY_MODEL`                                         | `anthropic` · `fake` · `off`                                                 | `anthropic` si hay clave; si no, `off` |
+| `HAPPY_MODEL_ID`                                      | Modelo que responde                                                          | `claude-sonnet-5-5`                    |
+| `HAPPY_EFFORT` · `HAPPY_THINKING`                     | `low                                                                         | medium                                 | high`·`adaptive | between_tools` | `low` · `adaptive` |
+| `HAPPY_ACCESS_CODE`                                   | Código del piloto (≥4 caracteres). Sin él, en producción Happy queda apagada | —                                      |
+| `HAPPY_DEVICE_SECRET`                                 | Secreto para firmar dispositivos (obligatorio en producción)                 | derivado del código                    |
+| `HAPPY_LIMIT_PER_HOUR` · `HAPPY_LIMIT_PER_DAY`        | Límites por dispositivo                                                      | 40 · 150                               |
+| `HAPPY_LIMIT_IP_PER_HOUR` · `HAPPY_LIMIT_IP_PER_DAY`  | Límites por IP                                                               | 400 · 1500                             |
+| `HAPPY_LIMIT_GLOBAL_DAY` · `HAPPY_MONTHLY_BUDGET_USD` | Tope global diario y presupuesto mensual (USD)                               | 1500 · 20                              |
 
 ```bash
-npm run happy:eval -- --composer=guion        # verifica el pipeline y el corredor sin IA
-ANTHROPIC_API_KEY=… npm run happy:eval         # evaluación real (informe en evals/resultados/)
+npm run happy:eval                        # suite de 85 escenarios con el modelo falso (estructural)
+npm run happy:eval -- --model anthropic   # con Claude API (requiere ANTHROPIC_API_KEY): conducta + rúbrica
+HAPPY_MODEL=fake HAPPY_ACCESS_CODE=piloto npm run app:dev   # Happy en local sin clave
 ```
 
-Fija también un límite de gasto mensual en la consola del proveedor: es el único tope de costo fiable antes de F4.
+El workflow manual **Happy · evaluación con modelo real** (`.github/workflows/happy-eval.yml`) corre la
+suite con el secreto `ANTHROPIC_API_KEY` del repositorio y publica el reporte como artefacto.
 
 ### Prototipo (un solo HTML)
 

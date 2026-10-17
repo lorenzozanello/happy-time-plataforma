@@ -1,5 +1,7 @@
 import type { LevelId } from "../../domain/curriculum/fields";
 import type { Unit } from "../../domain/curriculum/schema";
+import type { HappyMetrics } from "../../domain/happy/pipeline";
+import type { HistoryTurn } from "../../domain/happy/prompt";
 import type { HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
 
 export interface Session {
@@ -13,42 +15,60 @@ export interface AuthService {
   verifyCode(email: string, code: string): Promise<Session>;
 }
 
-export interface HappyTurn {
-  role: "docente" | "happy";
-  /** Docente: versión redactada. Happy: resumen breve de la respuesta. */
-  text: string;
-}
-
 export interface HappyRequest {
   mode: Mode;
   message: string;
   context: HappyContext;
-  /** Últimos turnos del hilo (memoria por hilo, §8.7). */
-  history?: HappyTurn[];
+  /** Últimos turnos del hilo (texto redactado), para que Happy mantenga el contexto. */
+  history?: HistoryTurn[];
+  /** Cancelación desde la interfaz (botón «Cancelar»). */
+  signal?: AbortSignal;
 }
 
-/**
- * Respuesta para la interfaz: el contrato del modelo + las unidades citadas con su texto
- * literal, resueltas por el servidor desde la release compilada (nunca por el modelo).
- */
-export interface HappyReply {
+/** Respuesta parcial o final de Happy con los literales de las unidades citadas. */
+export interface HappyPartial {
   response: HappyResponse;
   units: Unit[];
 }
-
-/** Error con un mensaje apto para mostrar a la docente (límites, reglas, disponibilidad). */
-export class HappyUserError extends Error {
-  override readonly name = "HappyUserError";
+export interface HappyResult extends HappyPartial {
+  metrics?: HappyMetrics;
 }
 
-/** Contrato de Happy (/api/happy en la app; simulador en el prototipo). Entrega bloques a medida que llegan. */
+/** Errores de Happy que la interfaz distingue (el resto son errores genéricos con reintento). */
+export type HappyErrorCode =
+  "access" | "disabled" | "limit" | "network" | "invalid" | "cancelled" | "timeout";
+export class HappyError extends Error {
+  constructor(
+    readonly code: HappyErrorCode,
+    message: string,
+  ) {
+    super(message);
+    this.name = "HappyError";
+  }
+}
+
+/** Contrato de Happy (F5: /api/happy). Entrega bloques a medida que llegan. */
 export interface HappyService {
-  respond(req: HappyRequest, onProgress: (partial: HappyReply) => void): Promise<HappyReply>;
+  respond(req: HappyRequest, onProgress: (partial: HappyPartial) => void): Promise<HappyResult>;
+}
+
+export interface HappyStatus {
+  enabled: boolean;
+  /** Hasta F4: la docente escribe una vez el código de acceso del piloto. */
+  needsCode: boolean;
+  hasCode: boolean;
+}
+
+/** Acceso provisional a Happy (F5, hasta la autenticación de F4). Ausente en el prototipo. */
+export interface HappyAccess {
+  status(): Promise<HappyStatus>;
+  setCode(code: string): void;
 }
 
 export interface Services {
   auth: AuthService;
   happy: HappyService;
+  happyAccess?: HappyAccess;
   /** Persistencia por navegador (prototipo). F4 la reemplaza por la base de datos. */
   storage: KeyValueStorage;
   /** Controles exclusivos del prototipo (ausentes en producción). */
@@ -101,8 +121,10 @@ export interface ThreadMessage {
   /** Respuesta o error: id del mensaje de la docente al que responde. */
   replyTo?: string;
   response?: HappyResponse;
-  /** Unidades citadas en `response`, con su literal (para mostrarlas sin la malla completa). */
+  /** Literales de las unidades citadas por la respuesta (la app no tiene la malla completa). */
   units?: Unit[];
+  /** Métricas de la respuesta (modelo, tokens, costo, latencias), para la docente y para auditoría. */
+  metrics?: HappyMetrics;
   error?: string;
   feedback?: "up" | "down";
   createdAt: number;

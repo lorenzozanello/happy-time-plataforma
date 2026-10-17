@@ -57,6 +57,9 @@ jobs:
       - name: Pruebas
         run: npm test
 
+      - name: Suite de Happy con el modelo falso (criterios estructurales, F5-09)
+        run: npm run happy:eval
+
   e2e:
     name: Prototipo e2e (360 px y escritorio, accesibilidad)
     runs-on: ubuntu-latest

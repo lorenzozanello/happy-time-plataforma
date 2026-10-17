@@ -107,7 +107,7 @@ const problems: string[] = [];
  * proveedor y el nombre de la clave. Si aparecen en un chunk del cliente, algo se filtró.
  */
 const SERVER_ONLY = [
-  "Eres Happy, el asistente curricular",
+  "Eres Happy, la asistente curricular",
   "anthropic-version",
   "ANTHROPIC_API_KEY",
 ];

@@ -10,4 +10,4 @@ playwright-report/
 .next/
 next-env.d.ts
 *.tsbuildinfo
-evals/resultados/
+evals/happy/reports/ci/

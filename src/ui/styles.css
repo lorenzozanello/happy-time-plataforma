@@ -1439,15 +1439,6 @@ h2.unit__title {
   border: 1.5px solid var(--line);
 }
 
-/* Cita guardada de otra release: se distingue de la malla vigente. */
-.block--stale {
-  border-style: dotted;
-}
-
-.block--stale .block__label {
-  color: var(--fg-2);
-}
-
 .block--generated {
   background: transparent;
   border: 1.5px dashed var(--accent);

@@ -1,19 +1,32 @@
 # EXECUTION_STATUS — Happy Time
 
-**Última actualización:** 2026-10-16
-**Fase actual:** F5 — Happy núcleo (lista en PR, salvo F5-09: medición con el modelo real, OD-2) · F3 fusionada (falta despliegue, OD-1) · F2 pendiente de revisión humana
-**Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe`
+**Última actualización:** 2026-10-16 (sesión 2)
+**Fase actual:** F5 — Happy núcleo (lista en el PR #5, que reemplaza la implementación del PR #4 (ADR-018); falta la corrida con el modelo real, que requiere el secreto) · F3-09 y F2-09 siguen pendientes del owner
+**Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe` · Gate 0 de cada archivo recibido en `docs/GATE0_LOG.md`
 
 | Fase | Estado | Evidencia / bloqueo |
 |---|---|---|
 | F0 Baseline | ✅ Aprobado por el owner (2026-10-16, “Procede”) | `docs/ARCHITECTURE_BASELINE_v1.md` |
-| F1 Compilador curricular | ✅ Fusionado (PR #1) · ⏳ OD-5 para cierre formal | PR #1, CI verde |
+| F1 Compilador curricular | ✅ Fusionado (PR #1) · ✅ OD-5 respondida (owner + coordinación aprueban releases) | PR #1, CI verde |
 | F2 Diseño y prototipo | ✅ Fusionado (PR #2) · ⏳ revisión humana (F2-09) | Reloj provisional hasta OD-6 |
-| F3 Malla en producción | ✅ Fusionado (PR #3) · ⏳ F3-09 despliegue (OD-1) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
-| F4 Acceso y Guardados | ⏸ | OD-1, OD-3 |
-| F5 Happy núcleo | ✅ F5-01…F5-08 en PR · ⏳ F5-09 (OD-2) | `npm run happy:eval` con la clave |
+| F3 Malla en producción | ✅ F3-01…F3-08 fusionados (PR #3) · ⏳ F3-09 despliegue (owner conecta Vercel) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
+| F4 Acceso y Guardados | ⏸ desbloqueada por OD-1 y OD-3; requiere que el owner cree Neon y Resend (gratis) | ADR-016 |
+| F5 Happy núcleo | ✅ F5-01…F5-12 en el PR #5 · ⏳ corrida con modelo real (secreto `ANTHROPIC_API_KEY`) | `npm run happy:eval`, `test:e2e:app`, ADR-017 |
 | F6 Happy extendida | ⏸ | OD-4 |
 | F7 Endurecimiento y piloto | ⏸ | OD-8 |
+
+## Sesión 2 (2026-10-16) — punto de partida verificado
+
+- Clon limpio de `main` (`20148de`, PR #3 fusionado): `npm run verify` ✅ (typecheck, lint, 216 pruebas,
+  `curriculum:check`), `curriculum:gate` 22/22 ✅, validador Python 572 unidades / 592 celdas, 0 errores ✅.
+- Gate 0 del Excel recibido en esta sesión (`Malla_HT_Versión_Final_Junio_2026_3.xlsx`): huella distinta,
+  **contenido idéntico** celda a celda (638/638). Es una re-exportación; la release 2026-06 sigue vigente.
+  Detalle en `docs/GATE0_LOG.md`.
+- Respuestas del owner (registradas en `DECISIONS.md`): **OD-1** hosting sin costo; **OD-2** Claude API
+  (tope mensual por definir en cifra; mientras tanto US$20 configurable); **OD-3** 3 roles, el owner es
+  admin, acceso por invitación; **OD-5** el owner **y** coordinación académica aprueban releases de la malla.
+- Orden de fases ajustado: F5 (Happy) antes que F4 (acceso) porque no depende de cuentas externas y es el
+  corazón del producto; `/api/happy` queda protegida por un código de acceso del piloto hasta F4 (ADR-017).
 
 ## F1 — Criterios de prueba (definidos antes de implementar)
 
@@ -127,50 +140,75 @@ Limitaciones conocidas: `/malla` depende del JavaScript para mostrar la experien
 
 ## F5 — Criterios de prueba (definidos antes de implementar)
 
-**Objetivo:** el núcleo de Happy en el servidor —políticas, enrutador, recuperación, composer, validación y streaming— listo para conectarse al proveedor de IA, y verificado de punta a punta sin él.
+**Objetivo:** Happy real en la app de producción para encontrar, conectar y aterrizar la malla:
+`/api/happy` con Claude API, salida estructurada, streaming por bloques, cita por referencia (el servidor
+entrega el literal de cada unidad citada), políticas de entrada y salida **en el servidor**, caché de
+prompt, medición de latencia y costo por respuesta, límites de uso, suite de evaluación de ≥70 escenarios
+ejecutable con modelo falso (CI) y con modelo real (workflow manual con la clave en secretos), y estados
+del avatar ligados a eventos reales del stream.
 
-**Supuestos (trabajo autónomo, según las recomendaciones del Baseline):**
-- **OD-2 sin respuesta** → se implementa la recomendación (Claude API) detrás de una interfaz `Composer`. Modelo por variable de entorno (`HAPPY_MODEL`, predeterminado `claude-sonnet-5-5`); sin clave no hay llamadas ni costo. La calidad real (rúbrica, latencia, costo) se mide cuando el owner cargue la clave.
-- **F4 aún no existe** (sin autenticación): `/api/happy` queda **apagada por defecto** en producción (`HAPPY_ENABLED`). Encenderla sin F4 solo es aceptable en una vista previa privada, con límites por IP y tope diario.
-- Sin base de datos todavía: el hilo vive en el navegador y el cliente envía los últimos turnos ya redactados; la persistencia en servidor (con `model`, `prompt_version`, unidades y latencias) llega con F4.
-- El handoff original (§5–6, tono e identidad) no está en esta sesión: el prompt v1 se redacta desde el Baseline (§3–4, §8) y queda marcado para revisión del owner.
-- El texto literal de las citas lo resuelve el **servidor** desde el JSON compilado (nunca el modelo) y viaja junto al bloque: la app no necesita la malla completa en el navegador.
+**Supuestos:**
+- OD-2: Claude API. Modelo por defecto `claude-sonnet-5-5` para responder (configurable por variable de
+  entorno); `claude-haiku-5-5` solo como juez de la rúbrica en la suite. Tope mensual **configurable**
+  (`HAPPY_MONTHLY_BUDGET_USD`, por defecto 20 hasta que el owner fije la cifra) más un tope duro en la
+  consola de Anthropic que fija el owner. La clave nunca pasa por el chat: va a *Settings → Secrets* del
+  repositorio (`ANTHROPIC_API_KEY`) y a las variables de entorno del hosting.
+- Sin autenticación hasta F4: `/api/happy` exige un **código de acceso del piloto** (`HAPPY_ACCESS_CODE`)
+  que la docente escribe una vez en su teléfono; además, límites por dispositivo y globales. Sin código
+  configurado en producción, Happy responde «no habilitada».
+- Sin base de datos hasta F4: los hilos siguen en el navegador (como los favoritos en F3); el cliente
+  envía al servidor los últimos turnos redactados como contexto; las métricas de cada respuesta viajan al
+  cliente y a los registros del servidor (JSON por línea). Los contadores de límite son por instancia.
+- Modelo falso determinista (`HAPPY_MODEL=fake`) para CI, e2e y la suite sin clave: produce JSON válido
+  por trozos con unidades reales recuperadas; nunca diagnostica ni reclama autoridad. Con él, la suite
+  mide solo los criterios estructurales; los criterios de conducta se miden con el modelo real.
 
 | ID | Criterio | Cómo se verifica |
 |---|---|---|
-| F5-01 | `/api/happy` segura por defecto | Apagada sin `HAPPY_ENABLED`; mismo origen; cuerpo ≤ 8 KB validado con Zod; límite por IP y tope diario; errores en español; sin secretos en el cliente (chequeo de bundle) |
-| F5-02 | Política de entrada en el servidor | Datos identificables → aviso de privacidad **sin llamar al modelo** y sin registrar el original; mismas 44 pruebas del detector + pruebas del endpoint |
-| F5-03 | Contexto y enrutador | Contexto validado contra el catálogo; intención elegida o reglas para texto libre; pruebas por modo |
-| F5-04 | Recuperación determinista (§8.3) | Siempre las 7 Observaciones + progresión del nivel; experiencia activa completa; búsqueda léxica filtrada por nivel; tope de tamaño; `retrieved_unit_ids` registrado |
-| F5-05 | Composer | Prompt versionado (`src/server/happy/prompt.v1.ts`) sin texto curricular escrito a mano (las Observaciones se inyectan desde el JSON); adaptador de Claude con streaming y caché de prompt, probado contra un servidor simulado; `model` y `prompt_version` en cada respuesta |
-| F5-06 | Validación en streaming | Cada bloque se valida antes de mostrarse (unitId recuperado, sin autoridad, sin diagnóstico/nota, sin copia literal, ≤3 caminos); un reintento si no queda ningún bloque válido; literales resueltos por el servidor |
-| F5-07 | Happy en la app | Servicio HTTP con streaming; Happy usable en la app sin la malla completa en el navegador; estados del avatar ligados a eventos; e2e contra `next start` con un composer de guion (solo en modo prueba) |
-| F5-08 | Suite de evaluación | ≥40 escenarios versionados (incluidos los adversariales del §8.8) con criterios duros automáticos; el corredor detecta violaciones (probado con respuestas malas de guion) |
-| F5-09 | Calidad con el modelo real | 100 % criterios duros, ≥85 % rúbrica, p75 primer bloque ≤ 6 s, costo por respuesta medido — **requiere OD-2** |
+| F5-01 | Contrato de `/api/happy` | `POST` con `{mode, message, context, history}` → `application/x-ndjson` con eventos `meta` (unidades recuperadas), `block` (bloque validado + literales citados), `reset`, `done` (respuesta completa + métricas) y `error`; cuerpo inválido → 400 en español. Pruebas unitarias del pipeline y e2e con modelo falso |
+| F5-02 | Política de entrada en el servidor | Privacidad (misma política que el cliente): mensaje con datos identificables → `notice privacy` **sin llamar al modelo** y sin registrar el original; el texto de la docente va al modelo como datos delimitados, nunca como instrucciones |
+| F5-03 | Recuperación determinista | Siempre las 7 Observaciones; progresión del nivel; los 24 campos + título de la experiencia activa; mejores coincidencias léxicas filtradas por nivel; preguntas de nivel sin experiencia → títulos y alcances del nivel. Conjunto acotado y registrado en `meta.retrieved` |
+| F5-04 | Composer con caché de prompt | `prompts/happy.system.v1.md` versionado; bloque estable (system + Observaciones) con `cache_control` 1 h; bloque de nivel/experiencia con `cache_control` 5 min; coincidencias y turno en el mensaje. Prueba unitaria sobre la petición construida (cliente de modelo que la registra) |
+| F5-05 | Streaming por bloques | Parser incremental que emite cada bloque al cerrarse (probado cortando el JSON en todas las posiciones); el cliente pinta bloques parciales; avatar: *Piensa* al enviar → *Idea* con el primer bloque → *Resultado* al cerrar. e2e verifica los tres estados con tiempos del modelo falso |
+| F5-06 | Validador de salida en el servidor | Cada bloque: esquema, `unitId` ∈ recuperados, segmento existente, sin autoridad, sin diagnóstico/calificación, sin copia literal (ventana de 8 palabras); respuesta: ≤3 caminos, modo habilitado. Bloque inválido → se descarta y se cuenta; respuesta vacía o esquema roto → **un** reintento con los errores como retroalimentación; si persiste → `error` |
+| F5-07 | Cita por referencia de punta a punta | La respuesta incluye solo las unidades citadas (literal + procedencia); la UI pinta el literal desde ahí; prueba e2e compara cada `[data-unit-id]` con el JSON compilado; `app:check-bundle` sigue en 0 secuencias en el cliente; anti-hardcode cubre `prompts/` y `evals/` |
+| F5-08 | Costo, latencia y límites | Cada respuesta registra `model`, `prompt_version`, `release`, tokens (entrada, caché leída/escrita, salida), costo estimado USD, latencia al primer bloque y total; límites por código/dispositivo y globales por día, y tope mensual → aviso amable sin llamar al modelo. Pruebas unitarias del estimador y de los límites |
+| F5-09 | Suite de evaluación | `evals/happy/scenarios.v1.json` con ≥70 escenarios (incl. adversariales: autismo, nota, informe con TDAH, ignorar instrucciones, nivel inexistente, idea sin conexión real); `npm run happy:eval` → reporte JSON+Markdown con criterios duros (100 % exigido), rúbrica (juez Haiku, ≥85 %), p75 primer bloque, costo medio. Con modelo falso corre en CI (estructural); con `ANTHROPIC_API_KEY` corre el workflow manual `happy-eval` |
+| F5-10 | Acceso provisional | Sin código → 401; código incorrecto → 401; con código → stream; sin `HAPPY_ACCESS_CODE` en producción → 503 «no habilitada». CSP y cabeceras intactas. e2e |
+| F5-11 | Accesibilidad y móvil | `/happy` y una conversación: axe sin violaciones serias en claro y oscuro a 360 px; objetivos ≥44 px; sin scroll horizontal; foco |
+| F5-12 | Calidad y cierre | `npm run verify`, `test:e2e`, `app:build`, `app:check-bundle`, `test:e2e:app` en verde; docs actualizados; revisión adversarial independiente corregida; **un solo push**, PR #4 |
 
 ### Resultado F5 (2026-10-16)
 
 | ID | Resultado | Evidencia |
 |---|---|---|
-| F5-01 | ✅ | `/api/happy` apagada sin `HAPPY_ENABLED` (503); mismo origen (403); cuerpo leído en streaming y cortado a 48 KB (413); Zod estricto (400); límites por IP (ventana y día) y tope global diario; IP solo de cabeceras de la plataforma; `app:check-bundle` verifica que el prompt, el SDK y la clave no estén en el cliente |
-| F5-02 | ✅ | Política en el servidor sobre el mensaje y los turnos de la docente: aviso sin llamar al modelo (prueba con espía); el registro nunca guarda texto de la docente ni texto generado. Detector ampliado (NFKC, teléfonos con separadores e indicativo, «número», @usuario, «carrera X con calle Y»): 63 casos |
-| F5-03 | ✅ | Contexto validado contra la release (nivel inexistente se descarta; nivel+periodo → experiencia); intención elegida o reglas; modos de F6 → `general` |
-| F5-04 | ✅ | 7 Observaciones siempre; experiencia activa (título + 24 campos); progresión del nivel; búsqueda léxica filtrada por nivel; año del nivel en preguntas amplias; tope de 36 000 caracteres; `retrievedUnitIds` en el registro |
-| F5-05 | ✅ | `prompt.v1.ts` con Observaciones inyectadas desde el JSON (anti-hardcode cubre `src/` y `evals/happy`); adaptador de Claude probado contra un servidor simulado: modelo, clave, streaming, caché del prompt de sistema y de las unidades, uso de tokens; `model` y `prompt_version` en cada respuesta |
-| F5-06 | ✅ | Validación por bloque antes de emitir: cita recuperada, segmento existente, sin autoridad, sin diagnóstico/etiqueta/nota, sin copia (normalizada, también unidades cortas), frase partida entre campos, ≤3 caminos (recorta), ≤8 bloques, ≤3 acciones; aviso de privacidad con texto del servidor; un reintento si no queda nada válido; parcial y abortado registrados |
-| F5-07 | ✅ | Happy en la app vía HTTP/NDJSON sin la malla en el navegador; disponibilidad en tiempo de ejecución; conversación retomable con literales; citas de otra release marcadas; errores del servidor visibles; 9 e2e × 2 proyectos con Happy encendida (composer de guion) |
-| F5-08 | ✅ | 48 escenarios (incluidos los adversariales del §8.8 y los formatos de privacidad de la revisión); criterios duros automáticos + **juez independiente** con reglas propias; el corredor detecta cada violación (pruebas con respuestas malas); guion: 48/48 duros |
-| F5-09 | ⏳ | **Requiere OD-2.** Con la clave: `ANTHROPIC_API_KEY=… npm run happy:eval` → informe con criterios duros, p75 de primer bloque, tokens, costo (con precios vigentes) y rúbrica para calificar a mano |
+| F5-01 | ✅ | `POST /api/happy` → NDJSON `meta → block… → done` (o `reset`/`error`); 400/401/429/503 en español. `tests/unit/happy-pipeline.test.ts`, `tests/e2e/happy.spec.ts` («Contrato HTTP») |
+| F5-02 | ✅ | Política de privacidad en el servidor sobre el mensaje **y** la conversación previa, con texto normalizado; sin llamada al modelo y sin registro del original. Unitarias (M1, N4) y e2e («privacidad… sin llamar a /api/happy») |
+| F5-03 | ✅ | Observaciones + progresión y perfiles del nivel + 25 unidades de la experiencia + coincidencias filtradas por nivel (6/10/12 según el caso); `meta.retrieved`. 4 pruebas unitarias |
+| F5-04 | ✅ | `system.v1.ts` (versión `happy-system-v1`); bloque estable 1 h (> 512 tokens) y bloque de nivel 5 min; mensaje como datos con valla aleatoria. Prueba sobre la petición construida |
+| F5-05 | ✅ | `BlockStreamReader` probado cortando el JSON en todas las posiciones; e2e verifica *piensa → idea → resultado* con los tiempos del modelo falso (350 ms / 60 ms) en móvil y escritorio |
+| F5-06 | ✅ | Validación por bloque (cita no recuperada, segmento, autoridad, diagnóstico, calificación, copia normalizada, >3 caminos, >8 bloques, aviso de privacidad del modelo); reintento único; `refusal` y `max_tokens` manejados. 20 + 68 pruebas unitarias |
+| F5-07 | ✅ | El servidor envía solo las unidades citadas; e2e compara cada `[data-unit-id]` con el JSON compilado (incluido un fragmento); hilos guardados verificados por release y huella; `app:check-bundle` 0 secuencias; anti-hardcode cubre `evals/` |
+| F5-08 | ✅ | Métricas por respuesta (modelo, prompt, release, tokens con caché, costo, latencias, stopReason, descartes); límites por dispositivo firmado e IP; presupuesto mensual (falla cerrado con precio desconocido). Unitarias + e2e («rotar el id… 429») |
+| F5-09 | ✅ (modelo falso) · ⏳ (modelo real) | 85 escenarios en 8 grupos; `npm run happy:eval` con el falso: duros 100 % (estructural) en CI; `evals/happy/reports/latest-fake.md`. La corrida con Claude (`happy-eval`, workflow manual) requiere `ANTHROPIC_API_KEY` en los secretos del repositorio |
+| F5-10 | ✅ | Sin código → formulario; código corto → error; código incorrecto guardado → se vuelve a pedir y el mensaje queda; dispositivo firmado emitido con el código; sin `HAPPY_ACCESS_CODE` en producción → `off`. e2e |
+| F5-11 | ✅ | axe sin violaciones serias en claro y oscuro (código, apertura y conversación), 360 px y escritorio; objetivos ≥44 px; foco en el campo del código y en el compositor |
+| F5-12 | ✅ | `npm run verify` (370 pruebas), `happy:eval`, `app:build`, `app:check-bundle`, `test:e2e:app` (77), `test:e2e` (35) en verde; dos revisiones adversariales corregidas (ADR-017); un push, PR #5 (reemplaza el PR #4, ADR-018) |
 
-Revisión adversarial independiente de F5 (corregida en el mismo PR): **alto** — el validador dejaba pasar reclamos de autoridad, diagnósticos y notas con redacciones comunes, y la evaluación reusaba sus mismas reglas; la detección de copia se evadía sin tildes, con NFD, invisibles u homoglifos; teléfonos y documentos frecuentes evadían la política de privacidad. **medio** — turnos de Happy en el historial disparaban avisos falsos; límite por IP evadible con `X-Forwarded-For` y tope diario global; literales guardados de otra release se mostraban como vigentes; unidades cortas copiables. **bajo** — localStorage alterado tumbaba el hilo; cuerpo sin `Content-Length` se leía entero; `save_idea` sin validar ni manejador; errores del servidor ocultos; solicitudes abortadas sin registro; respuestas truncadas como completas; huecos de la suite.
+**Revisión adversarial independiente de F5 (2 pasadas, corregidas en el mismo PR):** **alta** — la suite evaluaba la respuesta ya filtrada por el validador (no medía al modelo); un hilo alterado o de otra release en `localStorage` podía pintar un literal falso como «Desde nuestra malla…»; **media** — history sin política de privacidad, límites evadibles rotando cabeceras, validador con huecos y luego con falsos positivos sobre vocabulario de inclusión, copia literal con invisibles y homoglifos, precio desconocido = costo 0, sin timeout ni cancelación, huella solo del texto (procedencia manipulable), límite por IP compartido por el NAT del jardín, pérdida silenciosa de respuestas guardadas; **baja** — motivos de descarte con texto, foco y `aria-live`, `?experiencia=` inválida, longitud del código, combinaciones de thinking/modelo, secreto expuesto a `npm ci`, juez manipulable y barra sin mínimo por escenario, correcciones con saltos de línea.
 
-Limitaciones conocidas: sin autenticación (F4) los límites son de mejor esfuerzo y por instancia; **el tope real de gasto es el límite mensual en la consola del proveedor (owner)**. No encender Happy en un despliegue público antes de F4. Las reglas de salida son heurísticas: la tasa de bloques descartados con el modelo real (`descartados` en el informe) dirá si hay falsos rechazos que ajustar en `prompt.v2`. El prompt v1 se redactó sin el handoff original (§5–6): revisión del owner pendiente.
+Limitaciones conocidas: los contadores de límites y presupuesto son por instancia (en Vercel se reinician en cada arranque en frío): el tope duro de gasto es el de la consola de Anthropic. Las actions de GitHub van por versión, no por SHA. La conducta real del modelo (rúbrica, p75, costo) no se ha medido todavía: depende del secreto.
 
 ## Decisiones abiertas del owner
-OD-1 hosting/datos · OD-2 IA y presupuesto · OD-3 roles/accesos/retención · OD-4 datos de menores · OD-5 gobierno curricular · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
-OD-7 resuelta: repositorio `lorenzozanello/happy-time-plataforma`.
+OD-2 **cifra** del tope mensual · OD-4 datos de menores · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
+Resueltas: OD-1 (hosting sin costo, ADR-016), OD-3 (3 roles, owner admin), OD-5 (owner + coordinación), OD-7 (repositorio).
 Recomendado: activar protección de `main` (PR obligatorio + CI verde + code owners).
 Pendiente H-01: confirmación del hash contra un registro externo al ZIP.
 
 ## Próximo paso
-F5 en curso en la rama `f5-happy-nucleo` (trabajo autónomo por indicación del owner, 2026-10-16). Pendientes del owner: Vercel (OD-1, cierra F3-09), clave y presupuesto de IA (OD-2, cierra F5-09), roles y accesos (OD-3, habilita F4), recorrido con docentes (F2-09).
+1. Owner: `ANTHROPIC_API_KEY` en *Settings → Secrets and variables → Actions* del repositorio y tope de gasto
+   en la consola de Anthropic; con eso corre `happy-eval` con el modelo real.
+2. Owner: crear el proyecto en Vercel (plan Hobby) conectado al repositorio y poner `ANTHROPIC_API_KEY` y
+   `HAPPY_ACCESS_CODE` como variables de entorno (cierra F3-09 y habilita Happy en la vista previa).
+3. Owner + 2–3 docentes: recorrer la vista previa en móvil (cierra F2-09).
+4. F4 (acceso, guardados y métricas en servidor) con Neon + Resend (gratis): el owner crea ambas cuentas.

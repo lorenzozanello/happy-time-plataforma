@@ -17,7 +17,7 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 **Consecuencias:** cero credenciales de Google en v1; páginas de malla estáticas; un cambio curricular requiere un PR y un despliegue (deseable: deja rastro y revisión).
 
 ## ADR-003 — Releases curriculares inmutables con aprobación del owner
-**Estado:** Propuesta · confirmar responsables en OD-5
+**Estado:** Aceptada (OD-5 respondida el 2026-10-16: aprueban el **owner y coordinación académica**; se reflejará como dos revisiones requeridas en la protección de `main` para `curriculum/source/`)
 **Contexto:** el handoff pide malla “editable desde fuente única” y a la vez Excel inmutable; el XLSX certificado es una exportación de Google Sheets.
 **Decisión:** la edición ocurre aguas arriba. Cada XLSX exportado entra como nueva release (`malla-<AAAA-MM>.xlsx`) mediante PR con gate, compilación y reporte de diferencias por unidad. El owner aprueba. La app **no** edita currículo.
 **Consecuencias:** historial completo de versiones; los guardados registran `release` y `unitId` y pueden avisar cambios.
@@ -29,7 +29,7 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 **Consecuencias:** un único formato de ID en todo el código, base de datos y URLs.
 
 ## ADR-005 — Stack: Next.js + Supabase + Vercel + GitHub
-**Estado:** Propuesta · confirmar en OD-1
+**Estado:** Reemplazada en la parte de hosting y datos por ADR-016 (OD-1: «opciones que no me cuesten»). Next.js, GitHub Actions y Claude API se mantienen.
 **Decisión:** Next.js (App Router, TypeScript strict, Tailwind, Zod) desplegado en Vercel; Supabase (Postgres + RLS + Auth OTP por correo con invitación, SMTP propio); GitHub Actions para CI.
 **Alternativas:** Vite SPA + funciones (más piezas); Google Sheets + Apps Script (histórico; sin transacciones ni RLS); Service Account (histórico; innecesaria con ADR-002).
 **Consecuencias:** las decisiones históricas Apps Script / Service Account quedan explícitamente **no heredadas**. Respuesta a las 6 preguntas del handoff §10: (1) currículo: repo, compilado; (2) usuarios y sesiones: Supabase Auth; (3) conversaciones, favoritos, planeaciones: Supabase Postgres; (4) autenticación: código OTP al correo, solo invitación; (5) acceso a Drive/Sheets: ninguno en runtime; solo el owner exporta releases; (6) secretos: Claude API key y service role en Vercel, SMTP en Supabase.
@@ -47,8 +47,8 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 **Consecuencias:** la trazabilidad es estructural, no depende del comportamiento del modelo.
 
 ## ADR-008 — Happy usa Claude API server-side con salida estructurada
-**Estado:** Pendiente owner (OD-2)
-**Decisión propuesta:** Claude API desde el route handler `/api/happy`; salida JSON validada por Zod; streaming por bloques; caché de prompt; modelo concreto fijado tras evaluación con la suite de F5; `model` y `prompt_version` registrados por mensaje. Gemini (histórico) no se hereda.
+**Estado:** Aceptada (OD-2 respondida el 2026-10-16: Claude API; la **cifra** del tope mensual sigue pendiente)
+**Decisión:** Claude API desde el route handler `/api/happy`; salida JSON con `output_config.format` (esquema estricto) validada después por Zod y por el validador de política; streaming por bloques; caché de prompt; modelo por defecto `claude-sonnet-5-5` (configurable; `claude-haiku-5-5` como juez de la suite) y confirmado con la suite de F5; `model` y `prompt_version` registrados por respuesta. La clave vive en secretos de GitHub Actions y del hosting, nunca en el repositorio ni en el chat. Tope duro de gasto en la consola de Anthropic (owner) + tope blando en la app (`HAPPY_MONTHLY_BUDGET_USD`). Gemini (histórico) no se hereda. Detalles de implementación: ADR-017.
 
 ## ADR-009 — Sin datos identificables de menores en v1
 **Estado:** Pendiente owner (OD-4)
@@ -111,13 +111,35 @@ Formato: contexto → decisión → consecuencias. Estado: **Propuesta** (vigent
 - **Verificación sobre la salida real:** `scripts/check-app-bundle.ts` comprueba que ningún JavaScript del cliente contiene texto curricular y que cada HTML/RSC pre-generado lleva solo las unidades de su página (más el catálogo).
 - **Happy y Guardados en servidor** quedan para F5/F4: en la app, Happy muestra «Happy llega pronto» y los favoritos viven en el navegador.
 
-## ADR-016 — Núcleo de Happy en el servidor (F5)
-**Estado:** Aceptada (2026-10-16), con la recomendación de OD-2 (Claude API) pendiente de confirmación del owner.
+## ADR-016 — Hosting y datos sin costo para el piloto (OD-1)
+**Estado:** Aceptada (2026-10-16; el owner pidió «opciones que no me cuesten»)
+**Contexto:** el piloto son 5–10 docentes; el tráfico es bajo y esporádico (entre actividades). Supabase gratuito **pausa** los proyectos tras 7 días sin uso (vacaciones escolares) y hay que reactivarlos a mano; eso es un riesgo operativo para una herramienta diaria.
 **Decisión:**
-- **Pipeline en `src/server/happy/`**, independiente de Next.js y probado sin servidor: política de entrada → contexto → intención → recuperación determinista → composer → validación por bloque → eventos NDJSON. `/api/happy` solo lo conecta.
-- **Composer intercambiable** (`Composer`): adaptador de Claude con `@anthropic-ai/sdk` (streaming, caché del prompt de sistema y del bloque de unidades, sin reintentos del SDK: el pipeline reintenta una vez → ≤2 llamadas por solicitud) y composer de **guion** solo para pruebas (exige `HAPPY_TEST_MODE=1` y que no sea un despliegue de Vercel). Modelo por `HAPPY_MODEL` (predeterminado `claude-sonnet-5-5`), que se fija por evaluación (F5-09).
-- **Formato de salida NDJSON** (un bloque por línea): permite validar y mostrar cada bloque en cuanto llega. Lo inválido se descarta y queda registrado por categoría; si no queda nada válido, un reintento y luego error.
-- **Cita por referencia de punta a punta:** el servidor resuelve cada `unitId` contra la release compilada y envía la unidad literal junto al bloque; la app nunca necesita la malla completa. Las citas guardadas de otra release se marcan como tales.
-- **Reglas sobre texto normalizado** (NFKC, sin invisibles, homoglifos plegados, sin tildes) compartidas por validador, huella curricular y privacidad. La evaluación usa además un **juez independiente** con reglas propias para no heredar puntos ciegos.
-- **Segura por defecto:** apagada sin `HAPPY_ENABLED=1` y clave; la interfaz pregunta la disponibilidad en tiempo de ejecución. Sin F4, los límites son de mejor esfuerzo; el control de gasto real es el límite del proveedor.
-- **Memoria por hilo** en el navegador (últimos turnos, Happy resumida) hasta F4; el servidor vuelve a aplicar la política a los turnos de la docente.
+- **App:** Vercel, plan Hobby (US$0). Renderizado en servidor, streaming y funciones con el límite de duración del plan, suficiente para Happy (respuestas ≤ 30 s). **Riesgo:** los términos del plan Hobby lo reservan a uso personal/no comercial; una institución educativa puede quedar fuera. Si Vercel lo objeta, la alternativa sin costo con uso comercial permitido es Cloudflare Workers (adaptador OpenNext); la app no depende de nada exclusivo de Vercel.
+- **Datos (F4):** Neon, plan gratuito (Postgres gestionado, 0,5 GB, se suspende y **reanuda sola** en ~1 s). Migraciones SQL y RLS en el repo; en CI se prueban con PGlite (Postgres en WebAssembly, sin servicio).
+- **Correo OTP (F4):** Resend, plan gratuito (3 000 correos/mes, 100/día) con dominio propio (SPF/DKIM). Código de 6 dígitos implementado en la app (sin Auth.js ni Supabase Auth).
+- **IA:** Claude API con tope de gasto en la consola (ADR-008). Es el único costo variable del piloto.
+- **Lo que el owner crea** (una vez): proyecto en Vercel conectado al repositorio; proyecto en Neon; cuenta en Resend; secretos en GitHub Actions y variables en Vercel.
+**Consecuencias:** cero costo fijo; límites de plan que se vigilan en F7 (bandwidth, filas, correos); sin Supabase Auth, el modelo de sesiones es propio (cookies `HttpOnly`, rate limit, auditoría) y queda bajo pruebas en F4.
+
+## ADR-017 — Implementación de Happy núcleo (F5)
+**Estado:** Aceptada (2026-10-16), tras dos pasadas de revisión adversarial independiente.
+**Decisiones:**
+- **Pipeline en el dominio** (`src/domain/happy/pipeline.ts`): generador de eventos (`meta`, `block`, `reset`, `done`, `error`) independiente del transporte y del proveedor. El route handler lo serializa como NDJSON; la suite lo consume en memoria. Un solo código para producción, CI y evaluación.
+- **Contrato de modelo** (`ModelClient`): adaptador de Claude API en `src/infra/anthropic-model.ts` y modelo falso determinista en `src/domain/happy/model.ts` (JSON válido por trozos, con marcadores `[[fake:…]]` para simular fallos). CI, e2e y la suite sin clave corren con el falso; su cobertura es **estructural**, no de conducta.
+- **Salida estructurada** (`output_config.format`, esquema `MODEL_OUTPUT_SCHEMA` solo con palabras clave admitidas) y **lector incremental** (`BlockStreamReader`) que entrega cada bloque al cerrarse su llave: el primer bloque llega sin esperar al final.
+- **Validación por bloque durante el stream** (`validateBlock`): esquema, cita dentro del conjunto recuperado, segmento, reglas de texto y copia literal. Bloque inválido → se descarta y se cuenta (`metrics.dropped`, solo motivos, sin texto); respuesta vacía o JSON ilegible sin bloques → un reintento con las correcciones; `refusal` → aviso fuera de alcance sin reintento; `max_tokens` con bloques válidos → se entregan marcados como truncados.
+- **Reglas de texto** (`rules.ts`, sin Zod, compartidas por servidor, cliente y suite): diseñadas por **precisión**. Atribución = institución como sujeto de un verbo de mandato (o «según/conforme a/es requisito de»), con negaciones exentas; diagnóstico = persona o cópula + término clínico, con contexto descriptivo exento («una niña con autismo», «ya trae un diagnóstico de TEA») y negación por cláusula; calificación = formatos explícitos de nota, escala, ranking o reprobación. El vocabulario de inclusión no se bloquea (ADR-014). Copia literal sobre texto normalizado (invisibles, tildes, homoglifos).
+- **Caché de prompt:** `system[0]` = reglas + 7 Observaciones (1 h, estable por release); `system[1]` = progresión y perfiles del nivel + experiencia activa (5 min, estable por hilo); coincidencias y turno en el mensaje. Mensaje de la docente delimitado con una valla aleatoria por petición; turnos previos en una línea cada uno.
+- **Política de privacidad en el servidor** sobre texto normalizado, aplicada al mensaje **y** a la conversación previa que envía el cliente; el modelo nunca recibe nombres, contactos, documentos ni direcciones.
+- **Cita por referencia de punta a punta:** el servidor resuelve y envía solo las unidades citadas (literal + procedencia). En el navegador se persisten con la respuesta; al leerlas se exige release vigente y **huella** (`unitFingerprint`: texto + encabezado + código + nivel + campo + celda + segmentos) contra la tabla que viaja únicamente con `/happy`. Lo que no verifica se muestra como error con «Reintentar», nunca a medias ni en silencio.
+- **Acceso provisional (hasta F4):** código del piloto (`HAPPY_ACCESS_CODE`, ≥4 caracteres) en cabecera, comparado en tiempo constante; dispositivo firmado (`HAPPY_DEVICE_SECRET`, HMAC) emitido al presentar el código; límites por dispositivo (40/h, 150/día) **y** por IP (10×), globales por día y presupuesto mensual (`HAPPY_MONTHLY_BUDGET_USD`, 20 por defecto). Contadores por instancia: el tope duro es el de la consola de Anthropic. Precio desconocido → se estima al precio más alto (falla cerrado).
+- **Cliente:** NDJSON con validación de forma sin Zod, tiempo máximo (45 s primer byte, 90 s total), botón «Cancelar» (el servidor honra la cancelación) y métricas visibles por respuesta (latencia al primer bloque y costo).
+- **Modelo por defecto** `claude-sonnet-5-5`, `effort: low`, pensamiento adaptativo; configurable. La suite decide el modelo definitivo cuando corra con la clave (workflow manual `happy-eval`).
+- **Suite de evaluación** (`evals/happy/scenarios.v1.json`, 85 escenarios): criterios duros sobre lo que ve la docente **y** sobre la salida cruda del modelo (en `adversarial` y `privacidad` cualquier bloque descartado es fallo duro; en el resto, de conducta); rúbrica por juez (`claude-haiku-5-5`, respuesta delimitada, media ≥85 % y mínimo 50 % por escenario); p75 del primer bloque ≤4 s; costo medio. El reporte versionado no contiene literales de la malla.
+- **Revisión adversarial (2 pasadas):** hallazgos altos corregidos — la suite medía la respuesta ya filtrada (A1) y un literal alterado en `localStorage` podía pintarse como malla (A2); medios — history sin política de privacidad, límites evadibles, validador débil y a la vez con falsos positivos sobre vocabulario de inclusión, copia con invisibles/homoglifos, precio desconocido = costo 0, sin timeout ni cancelación, huella solo del texto, límite por IP compartido por un NAT, pérdida silenciosa de hilos; bajos — motivos con texto, foco y `aria-live`, URL inválida, longitud del código, combinaciones de thinking, secreto en `npm ci`, juez manipulable. Pendientes documentados: fijar las actions por SHA; contadores de límite en base de datos (F4).
+
+## ADR-018 — Una sola implementación de Happy núcleo (reemplaza el PR #4)
+**Estado:** Aceptada (2026-10-16, decisión del owner: «Reemplazar la de main por la mía»).
+**Contexto:** dos sesiones construyeron F5 en paralelo. El PR #4 (fusionado) puso el núcleo en `src/server/happy/` con un ADR-016 propio; la otra versión (rama `f5-happy-nucleo-b`) lo puso en `src/domain/happy/` con ADR-016 (hosting) y ADR-017.
+**Decisión:** queda la versión de `src/domain/happy/` (ADR-017). Se retiran `src/server/happy/*`, `src/domain/text/normalize.ts`, `scripts/happy-eval.ts`, `evals/happy/escenarios.v1.json` y sus pruebas. Se conservan del PR #4 las mejoras del detector de privacidad (teléfonos con separadores, `@usuario`, «carrera X con calle Y», NFKC) y la comprobación de que el prompt, el SDK y el nombre de la clave no llegan al cliente. El ADR-016 del PR #4 («Núcleo de Happy en el servidor») queda **reemplazado** por ADR-017; el número ADR-016 corresponde a hosting sin costo. Todo sigue en el historial de git.

@@ -16,18 +16,21 @@ Contrato completo: `docs/ARCHITECTURE_BASELINE_v1.md`. Decisiones: `docs/DECISIO
 - **Prohibido hardcodear texto curricular** en `src/`, `scripts/` o `app/` (hay una prueba que lo detecta). La UI y Happy leen las unidades por `unitId` desde el JSON compilado.
 - Happy **cita por referencia** (ADR-007): el modelo devuelve `unitId`; la UI pinta el literal. Lo generado se etiqueta “Como idea complementaria…”.
 - Sin datos identificables de niñas y niños en v1 (ADR-009, pendiente OD-4).
-- Una nueva versión de la malla = nueva release con PR, gate, `curriculum:diff` y aprobación del owner (ADR-003).
+- Una nueva versión de la malla = nueva release con PR, gate, `curriculum:diff` y aprobación del owner y coordinación (ADR-003). Todo Excel recibido se registra en `docs/GATE0_LOG.md` antes de cualquier otra cosa.
+- Happy (F5, ADR-017): el modelo solo devuelve `unitId`; el servidor resuelve el literal y valida cada bloque (`src/domain/happy/`). Las reglas de texto (`rules.ts`) priorizan precisión: no bloquean el vocabulario de inclusión. Sin clave se usa el modelo falso (`HAPPY_MODEL=fake`); la clave nunca va al repo ni al chat.
 
 ## Comandos
 
-| Comando                                    | Qué hace                                           |
-| ------------------------------------------ | -------------------------------------------------- |
-| `npm run verify`                           | typecheck + lint + pruebas + check curricular      |
-| `npm run curriculum:gate`                  | Gate estructural de la fuente                      |
-| `npm run curriculum:compile`               | Regenera `curriculum/build/*`                      |
-| `npm run curriculum:check`                 | Falla si lo versionado difiere de la recompilación |
-| `npm run curriculum:verify-independent`    | Segunda lectura con Python/openpyxl                |
-| `npm run curriculum:diff -- a.json b.json` | Diferencias entre releases                         |
+| Comando                                     | Qué hace                                                     |
+| ------------------------------------------- | ------------------------------------------------------------ |
+| `npm run verify`                            | typecheck + lint + pruebas + check curricular                |
+| `npm run curriculum:gate`                   | Gate estructural de la fuente                                |
+| `npm run curriculum:compile`                | Regenera `curriculum/build/*`                                |
+| `npm run curriculum:check`                  | Falla si lo versionado difiere de la recompilación           |
+| `npm run curriculum:verify-independent`     | Segunda lectura con Python/openpyxl                          |
+| `npm run curriculum:diff -- a.json b.json`  | Diferencias entre releases                                   |
+| `npm run happy:eval`                        | Suite de Happy (modelo falso; `--model anthropic` con clave) |
+| `npm run app:build && npm run test:e2e:app` | App de producción: bundle, fidelidad, Happy, axe, LCP        |
 
 ## Al terminar
 

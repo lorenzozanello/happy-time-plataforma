@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { textHash } from "../../domain/curriculum/fingerprint";
+import { unitFingerprint } from "../../domain/curriculum/fingerprint";
 import { shortHeader, type CurriculumRepository } from "../../domain/curriculum/repository";
 import type { Unit } from "../../domain/curriculum/schema";
 import { catalogExperience, catalogLevel } from "../../domain/curriculum/views";
@@ -7,6 +7,7 @@ import type { HistoryTurn } from "../../domain/happy/prompt";
 import { checkPrivacy, PRIVACY_MESSAGE } from "../../domain/happy/privacy";
 import type { Block, HappyContext, HappyResponse, Mode } from "../../domain/happy/schema";
 import { summarizeResponse } from "../../domain/happy/shape";
+import { unverifiedMessage } from "../app/persisted";
 import { newId, now, useApp } from "../app/state";
 import {
   HappyError,
@@ -203,16 +204,25 @@ function makeVerifier(
   unitHashes: Record<string, string> | undefined,
   repo: CurriculumRepository | undefined,
 ): (u: Unit) => boolean {
-  if (unitHashes) return (u) => unitHashes[u.unitId] === textHash(u.text);
-  if (repo) return (u) => repo.maybeUnit(u.unitId)?.text === u.text;
+  if (unitHashes) return (u) => unitHashes[u.unitId] === unitFingerprint(u);
+  if (repo)
+    return (u) => {
+      const real = repo.maybeUnit(u.unitId);
+      return real !== undefined && unitFingerprint(real) === unitFingerprint(u);
+    };
   return () => false;
 }
 
-/** Descarta respuestas guardadas cuyos literales no pasen la verificación (nunca se pintan a medias). */
+/**
+ * Las respuestas guardadas cuyos literales no pasan la verificación se muestran como un error con
+ * «Reintentar» (nunca a medias ni en silencio).
+ */
 function verifiedThread(t: Thread | undefined, verify: (u: Unit) => boolean): Thread | undefined {
   if (!t) return undefined;
-  const messages = t.messages.filter((m) => !m.units || m.units.every(verify));
-  return messages.length === t.messages.length ? t : { ...t, messages };
+  const messages = t.messages.map((m) =>
+    !m.units || m.units.every(verify) ? m : unverifiedMessage(m),
+  );
+  return messages.some((m, i) => m !== t.messages[i]) ? { ...t, messages } : t;
 }
 
 function HappyChat({
@@ -357,6 +367,12 @@ function HappyChat({
       const result = await services.happy.respond(
         { mode: m, message: raw, context, history: historyOf(from), signal: controller.signal },
         (p) => {
+          // Tras un «reset» del servidor llegan 0 bloques: se vuelve al esqueleto de «piensa».
+          if (p.response.blocks.length === 0) {
+            setPhase("thinking");
+            setPartial(null);
+            return;
+          }
           setPhase("streaming");
           setPartial({ response: p.response, units: p.units.filter(verify) });
         },
@@ -412,6 +428,8 @@ function HappyChat({
       persist(current);
       setPartial(null);
       setPhase("idle");
+      // El botón «Cancelar» desaparece: el foco vuelve al compositor (revisión F5, N7).
+      if (err?.code === "cancelled") requestAnimationFrame(() => input.current?.focus());
     } finally {
       abortRef.current = null;
     }

@@ -108,12 +108,32 @@ function idea(v: unknown): SavedIdea | null {
 /** Valida una respuesta de Happy guardada; sin validador (app sin Happy) se descartan los hilos. */
 export type ResponseCheck = (v: unknown) => boolean;
 
+/** Lo que ve la docente cuando una respuesta guardada ya no se puede verificar (en vez de perderla sin aviso). */
+export const UNVERIFIED_RESPONSE_MESSAGE =
+  "Esta respuesta era de otra versión de la malla o no se pudo verificar. Pídela de nuevo para verla con la malla vigente.";
+
+/** Sustituye una respuesta guardada no verificable por un error con «Reintentar» (revisión F5, N6). */
+export function unverifiedMessage(
+  m: Pick<ThreadMessage, "id" | "createdAt" | "replyTo">,
+): ThreadMessage {
+  return {
+    id: m.id,
+    role: "happy",
+    createdAt: m.createdAt,
+    ...(m.replyTo ? { replyTo: m.replyTo } : {}),
+    error: UNVERIFIED_RESPONSE_MESSAGE,
+  };
+}
+
 function message(v: unknown, isResponse: ResponseCheck, release: string): ThreadMessage | null {
   if (!isObj(v) || !str(v.id, 100) || !num(v.createdAt)) return null;
   if (v.role !== "docente" && v.role !== "happy") return null;
-  if (v.response !== undefined && !isResponse(v.response)) return null;
-  // Literales citados: forma válida y de la release vigente; uno inválido descarta el mensaje entero
-  // (no se pinta a medias). La pantalla de Happy además comprueba la huella de cada texto.
+  const replyTo = str(v.replyTo, 100) ? { replyTo: v.replyTo } : {};
+  const unverified = () =>
+    unverifiedMessage({ id: v.id as string, createdAt: v.createdAt as number, ...replyTo });
+  if (v.response !== undefined && !isResponse(v.response)) return unverified();
+  // Literales citados: forma válida y de la release vigente; uno inválido convierte el mensaje en un
+  // error con reintento (nunca se pinta a medias). La pantalla de Happy además comprueba la huella.
   const units = arr(v.units);
   if (
     v.units !== undefined &&
@@ -121,7 +141,7 @@ function message(v: unknown, isResponse: ResponseCheck, release: string): Thread
       units.length > 40 ||
       !units.every((u) => isUnitShape(u) && u.release === release))
   )
-    return null;
+    return unverified();
   return {
     id: v.id,
     role: v.role,

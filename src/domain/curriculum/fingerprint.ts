@@ -11,9 +11,52 @@ export const WINDOW = 8;
  * guion suave…), sin tildes, minúsculas, solo letras y dígitos. Así una copia con invisibles o sin
  * tildes sigue coincidiendo con la malla (revisión adversarial F5).
  */
+const CONFUSABLES: Record<string, string> = {
+  а: "a",
+  е: "e",
+  о: "o",
+  р: "p",
+  с: "c",
+  у: "y",
+  х: "x",
+  і: "i",
+  ј: "j",
+  ѕ: "s",
+  ԁ: "d",
+  ɡ: "g",
+  А: "a",
+  Е: "e",
+  О: "o",
+  Р: "p",
+  С: "c",
+  Х: "x",
+  І: "i",
+  Т: "t",
+  М: "m",
+  Н: "h",
+  К: "k",
+  В: "b",
+  α: "a",
+  ο: "o",
+  ε: "e",
+  ι: "i",
+  ν: "v",
+  ρ: "p",
+  τ: "t",
+  υ: "u",
+  κ: "k",
+};
+
+/** Pliega homoglifos cirílicos y griegos frecuentes a su letra latina. */
+export function foldConfusables(s: string): string {
+  return s.replace(
+    /[\u0370-\u03FF\u0400-\u04FF\u0500-\u052F\u0250-\u02AF]/g,
+    (c) => CONFUSABLES[c] ?? c,
+  );
+}
+
 export function words(s: string): string[] {
-  return s
-    .normalize("NFKC")
+  return foldConfusables(s.normalize("NFKC"))
     .replace(/[\p{Cf}\u00AD]/gu, "")
     .normalize("NFD")
     .replace(/\p{M}/gu, "")
@@ -68,9 +111,29 @@ export function textHash(text: string, seed = 0): string {
   return n.toString(16).padStart(14, "0");
 }
 
-/** Tabla `unitId → huella del literal` de una release (viaja solo a la pantalla de Happy). */
+/**
+ * Huella de una unidad: texto **y procedencia** (encabezado, código, nivel, campo, tipo, celda y
+ * segmentos). Así un literal real con código o segmentos manipulados tampoco pasa (revisión F5, N2).
+ */
+export function unitFingerprint(u: Unit): string {
+  return textHash(
+    JSON.stringify([
+      u.text,
+      u.headerLiteral,
+      u.code ?? "",
+      u.levelId ?? "",
+      u.fieldKey,
+      u.kind,
+      u.source.sheet,
+      u.source.cell,
+      u.segments ?? [],
+    ]),
+  );
+}
+
+/** Tabla `unitId → huella` de una release (viaja solo a la pantalla de Happy). */
 export function unitHashes(units: readonly Unit[]): Record<string, string> {
   const out: Record<string, string> = {};
-  for (const u of units) out[u.unitId] = textHash(u.text);
+  for (const u of units) out[u.unitId] = unitFingerprint(u);
   return out;
 }

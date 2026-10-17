@@ -167,6 +167,7 @@ export function createHappyClient(storage: KeyValueStorage): HappyService {
           case "reset":
             blocks = [];
             units.clear();
+            onProgress({ response: { mode: req.mode, blocks: [], nextActions: [] }, units: [] });
             return;
           case "done": {
             const response = ev.response;

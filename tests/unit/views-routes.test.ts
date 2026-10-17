@@ -171,7 +171,7 @@ describe("F3 · datos del navegador no confiables", () => {
     }
   });
 
-  it("con validador conserva hilos válidos y descarta respuestas inválidas", () => {
+  it("con validador conserva hilos válidos y convierte respuestas inválidas en error", () => {
     const s = sanitizeStored(
       {
         threads: [
@@ -194,6 +194,12 @@ describe("F3 · datos del navegador no confiables", () => {
     );
     expect(s.threads).toHaveLength(1);
     expect(s.threads[0]?.context).toEqual({ experienceCode: "S2.1", periodIndex: 2 });
-    expect(s.threads[0]?.messages.map((m) => m.id)).toEqual(["m1"]);
+    // La respuesta inválida no desaparece en silencio: queda como error con «Reintentar».
+    expect(s.threads[0]?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+    expect(s.threads[0]?.messages[1]).toMatchObject({
+      role: "happy",
+      error: expect.stringContaining("verificar") as string,
+    });
+    expect(s.threads[0]?.messages[1]?.response).toBeUndefined();
   });
 });

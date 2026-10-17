@@ -24,7 +24,10 @@ export interface HappyConfig {
   maxTokens: number;
   /** Código del piloto; sin él, en producción Happy queda deshabilitada (F5-10). */
   accessCode: string | undefined;
+  /** Límites por dispositivo firmado (y globales/presupuesto). */
   limits: LimitsConfig;
+  /** Límites por IP: más amplios, porque un jardín entero puede salir por la misma IP (NAT). */
+  ipLimits: { perHour: number; perDay: number };
   fake: { firstChunkDelayMs: number; chunkDelayMs: number };
 }
 
@@ -51,6 +54,10 @@ export function configWarnings(c: HappyConfig, env: NodeJS.ProcessEnv = process.
     );
   if (env.HAPPY_THINKING === "between_tools" && c.thinking !== "between_tools")
     w.push("HAPPY_THINKING=between_tools no está disponible en Haiku: se usa adaptive.");
+  if (c.provider !== "off" && env.NODE_ENV === "production" && !env.HAPPY_DEVICE_SECRET)
+    w.push(
+      "Sin HAPPY_DEVICE_SECRET: la firma de dispositivos se deriva del código del piloto, que conocen las docentes. Define un secreto propio en producción.",
+    );
   return w;
 }
 
@@ -82,6 +89,10 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): HappyConfig {
       globalPerDay: int(env.HAPPY_LIMIT_GLOBAL_DAY, DEFAULT_LIMITS.globalPerDay),
       monthlyBudgetUsd: int(env.HAPPY_MONTHLY_BUDGET_USD, DEFAULT_LIMITS.monthlyBudgetUsd),
     },
+    ipLimits: {
+      perHour: int(env.HAPPY_LIMIT_IP_PER_HOUR, DEFAULT_LIMITS.perKeyPerHour * 10),
+      perDay: int(env.HAPPY_LIMIT_IP_PER_DAY, DEFAULT_LIMITS.perKeyPerDay * 10),
+    },
     fake: {
       firstChunkDelayMs: int(env.HAPPY_FAKE_FIRST_MS, 250),
       chunkDelayMs: int(env.HAPPY_FAKE_CHUNK_MS, 40),
@@ -95,6 +106,7 @@ interface Runtime {
   windows: Set<string>;
   model: ModelClient | undefined;
   limits: UsageLimits;
+  ipLimits: UsageLimits;
 }
 
 let runtime: Runtime | undefined;
@@ -115,6 +127,12 @@ export function getHappyRuntime(): Runtime {
     windows: curriculumWindows(repo.release.units),
     model,
     limits: new UsageLimits(config.limits),
+    ipLimits: new UsageLimits({
+      perKeyPerHour: config.ipLimits.perHour,
+      perKeyPerDay: config.ipLimits.perDay,
+      globalPerDay: Number.MAX_SAFE_INTEGER,
+      monthlyBudgetUsd: Number.MAX_SAFE_INTEGER,
+    }),
   };
   for (const w of configWarnings(config))
     console.warn(JSON.stringify({ at: "happy-config", warning: w }));

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   curriculumWindows,
   textHash,
+  unitFingerprint,
   unitHashes,
   words,
 } from "../../src/domain/curriculum/fingerprint";
@@ -47,7 +48,6 @@ describe("M3 · reclamos de autoridad por proximidad", () => {
     "La malla curricular de Happy Time determina que se evalúe.",
     "Esto es lo que la institución pide hacer.",
     "La malla propone un juego de apego.",
-    "La malla orienta, no prescribe, así que decides tú.",
     "Las mallas establecen que debes hacerlo así",
     "Desde nuestra malla…",
     "Desde nuestra mаlla…",
@@ -59,11 +59,105 @@ describe("M3 · reclamos de autoridad por proximidad", () => {
   it.each([
     "Es el momento en que la experiencia sucede; de aquí parten las ideas.",
     "Aquí viven las rimas de este periodo.",
+    "La malla orienta, no prescribe, así que decides tú.",
+    "La malla no exige notas numéricas; mira el principio citado arriba.",
     "Prepara el ambiente: qué materiales, dónde y cuánto tiempo.",
     "Convierte el tema de juego en una propuesta con materiales del patio.",
     "¿Para qué nivel y periodo lo necesitas?",
   ])("acepta: %s", (t) => {
     expect(claimsAuthority(t)).toBe(false);
+  });
+});
+
+describe("N1 · lenguaje pedagógico legítimo que NO se bloquea (ADR-014)", () => {
+  it.each([
+    // inclusión y apoyos
+    "Para una niña con autismo, es útil anticipar los cambios con imágenes.",
+    "Un niño con TDAH puede necesitar pausas de movimiento entre momentos.",
+    "Si la familia ya tiene un diagnóstico de TEA, el PIAR puede orientar las adaptaciones.",
+    "Una niña con síndrome de Down puede participar con apoyo de una compañera.",
+    "Si en el grupo hay niñas o niños en el espectro autista, es mejor avisar los cambios de actividad.",
+    "Las adaptaciones para un niño con dislexia o discalculia son parte del DUA.",
+    "Con un déficit visual, es clave el contraste de los materiales.",
+    "Una niña con parálisis cerebral usa silla de ruedas; adapta el circuito.",
+    "Sin diagnosticar nada, observa cómo responde al ruido.",
+    "No me corresponde diagnosticar autismo; sí puedo ayudarte a observar.",
+    "Diagnosticar un trastorno corresponde a un profesional de apoyo.",
+    // sentido no clínico
+    "El espectro de intereses del grupo es amplio: insectos, carros y cocina.",
+    "Si hay retraso en la llegada de las familias, es mejor empezar con un juego corto.",
+    "El tren de cartón puede tener retraso en la salida; aprovecha para contar vagones.",
+    // normas del aula y coordinación
+    "Establece una norma sencilla con el grupo: hablamos de a uno.",
+    "Las normas del juego indican quién empieza y quién sigue.",
+    "Propone normas con las niñas y los niños antes de salir al patio.",
+    "Pide una cita con la coordinación para revisar el PIAR.",
+    "Ponte de acuerdo con la coordinación para el uso del patio.",
+    "Consulta con la coordinación qué dice el PIAR sobre los apoyos.",
+    // hablar de la malla sin atribuirle lo generado
+    "Esta cita de la malla conecta con tu idea por el tema del juego.",
+    "¿Quieres que busque qué propone la malla para este periodo?",
+    "La malla no exige notas numéricas; mira el principio citado arriba.",
+    "Busqué en las unidades de la malla y la cita que más se acerca es esta.",
+    "Es el momento en que la experiencia sucede; de aquí parten las ideas.",
+    // matemáticas, música, observación
+    "Clasificación de 3 tipos de semillas en vasos transparentes.",
+    "Una clasificación básica por color sirve para empezar.",
+    "Canta una nota alta y una nota baja para que las imiten.",
+    "Toca la escala del xilófono de 1 a 5 láminas.",
+    "Escribe una nota a la familia con 3 ideas para el fin de semana.",
+    "Toma nota de 2 cosas que hagan con las manos durante el juego.",
+    "Cuenta 1, 2, 3 objetos con el grupo.",
+    "Pon 5 minutos de exploración libre y luego recoge.",
+    "Trabaja con 3 de 5 estaciones el primer día.",
+    "Los indicadores son cualitativos; registra lo que observas.",
+  ])("acepta: %s", (t) => {
+    expect(textRuleErrors(t)).toEqual([]);
+  });
+});
+
+describe("N5 · evasiones de la segunda pasada", () => {
+  it.each([
+    "La malla, en su apartado de principios para el nivel, exige evaluar cada semana.",
+    "Lo dice la malla: hay que evaluar.",
+    "El plan de estudios establece que se evalúe.",
+    "La rectoría exige un informe numérico.",
+    "Las docentes de Happy Time deben poner nota.",
+    "Es política de la institución calificar cada periodo.",
+    "El documento curricular del jardín dispone que se haga así.",
+  ])("autoridad: %s", (t) => {
+    expect(claimsAuthority(t)).toBe(true);
+  });
+  it.each([
+    "No me corresponde diagnosticar, pero claramente tiene TDAH.",
+    "No puedo decir que es autista, aunque todo apunta a autismo.",
+    "Encaja con TDAH.",
+    "Todo apunta a autismo.",
+    "Compatible con un cuadro de TDAH.",
+    "Ese niño es T.E.A.",
+    "Esa niña tiene una condición del neurodesarrollo.",
+    "Él es autista.",
+    "Presenta rasgos autistas",
+    "Probablemente sea TDAH",
+    "Hay sospecha de dislexia",
+  ])("diagnóstico: %s", (t) => {
+    expect(diagnoses(t)).toBe(true);
+  });
+  it.each([
+    "Merece un cuatro sobre cinco.",
+    "Pondría 4 en matemáticas.",
+    "Nivel de logro: alto.",
+    "Desempeño bajo",
+    "No superan el mínimo en conteo.",
+  ])("calificación: %s", (t) => {
+    expect(grades(t)).toBe(true);
+  });
+  it("copia con homoglifos cirílicos también se detecta", () => {
+    const literal = repo.unit("S2.3#momento_vivir").text.split(" ").slice(0, 12).join(" ");
+    const cyr = literal.replace(/o/g, "\u043e").replace(/e/g, "\u0435");
+    expect(generatedTextErrors(cyr, { curriculumWindows: windows }).join(" ")).toMatch(
+      /copia la malla/,
+    );
   });
 });
 
@@ -326,34 +420,53 @@ describe("A2 · literales guardados en el navegador", () => {
     ],
   });
 
-  it("una unidad de otra release se descarta al leer el almacenamiento", () => {
+  it("una unidad de otra release se convierte en error con reintento al leer el almacenamiento", () => {
     const stale = {
       ...real,
       release: "2019-01",
       text: "TEXTO FABRICADO: la malla exige nota numérica.",
     };
     const state = sanitizeStored(thread(stale), catalog, isTrustedResponseShape);
-    expect(state.threads[0]?.messages.map((m) => m.id)).toEqual(["m1"]);
+    expect(state.threads[0]?.messages[1]).toMatchObject({
+      id: "m2",
+      role: "happy",
+      replyTo: "m1",
+      error: expect.stringContaining("otra versión") as string,
+    });
+    expect(state.threads[0]?.messages[1]?.units).toBeUndefined();
     const ok = sanitizeStored(thread(real), catalog, isTrustedResponseShape);
-    expect(ok.threads[0]?.messages.map((m) => m.id)).toEqual(["m1", "m2"]);
+    expect(ok.threads[0]?.messages[1]?.response).toBeDefined();
   });
 
-  it("un texto alterado con la release correcta no coincide con la huella de la release", () => {
+  it("texto, código o segmentos alterados con la release correcta no coinciden con la huella", () => {
     const hashes = unitHashes(release().units);
     const tampered = { ...real, text: "TEXTO FABRICADO: la malla exige nota numérica." };
-    expect(hashes[tampered.unitId]).not.toBe(textHash(tampered.text));
-    expect(hashes[real.unitId]).toBe(textHash(real.text));
+    expect(hashes[tampered.unitId]).not.toBe(unitFingerprint(tampered));
+    expect(hashes[real.unitId]).toBe(unitFingerprint(real));
+    expect(hashes[real.unitId]).not.toBe(unitFingerprint({ ...real, code: "T.4" }));
+    expect(hashes[real.unitId]).not.toBe(unitFingerprint({ ...real, headerLiteral: "Alertas" }));
+    expect(hashes[real.unitId]).not.toBe(
+      unitFingerprint({
+        ...real,
+        segments: [
+          { key: "tema", label: "Alerta", start: 0, end: 10, valueStart: 0, valueEnd: 10 },
+        ],
+      }),
+    );
     expect(Object.keys(hashes)).toHaveLength(572);
     expect(textHash("a")).not.toBe(textHash("b"));
     expect(textHash("hola")).toBe(textHash("hola"));
   });
 
-  it("una respuesta guardada cuyo texto generado reclama autoridad o diagnostica se descarta", () => {
+  it("una respuesta guardada cuyo texto generado reclama autoridad se convierte en error", () => {
     const bad = {
       ...response,
       blocks: [{ kind: "idea", text: "La malla exige que pongas nota." }],
     };
     const state = sanitizeStored(thread(real, bad), catalog, isTrustedResponseShape);
-    expect(state.threads[0]?.messages.map((m) => m.id)).toEqual(["m1"]);
+    expect(state.threads[0]?.messages[1]).toMatchObject({
+      id: "m2",
+      error: expect.any(String) as string,
+    });
   });
 });

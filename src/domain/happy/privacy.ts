@@ -10,6 +10,8 @@
  * Detector heurístico preliminar; la suite de evaluación de F5 lo mide y lo afina.
  */
 
+import { stripFormat } from "./rules";
+
 export type PrivacyFinding = "named_person" | "contact" | "identifier" | "address";
 
 export interface PrivacyResult {
@@ -133,7 +135,9 @@ function nameTokens(text: string): Set<number> {
   return names;
 }
 
-export function checkPrivacy(text: string): PrivacyResult {
+export function checkPrivacy(raw: string): PrivacyResult {
+  // Se trabaja sobre el texto normalizado (sin invisibles): «Ma\u200bteo» es «Mateo» (revisión F5, N4).
+  const text = stripFormat(raw.normalize("NFKC"));
   const findings = new Set<PrivacyFinding>();
   const spans: [number, number, string][] = [];
   const collect = (re: RegExp, finding: PrivacyFinding, marker: string) => {

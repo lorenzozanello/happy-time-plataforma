@@ -100,14 +100,20 @@ export async function POST(req: Request): Promise<Response> {
     return json(400, { error: "invalid", message: "La solicitud no tiene el formato esperado." });
   }
 
-  // Límites: por dispositivo firmado (si lo hay) y siempre por IP. Sin dispositivo válido, la IP
-  // carga con el límite completo del dispositivo además del suyo.
+  // Límites: por dispositivo firmado (topes de docente, globales y presupuesto) y, a la vez, por IP
+  // con topes más amplios (un jardín entero puede salir por la misma IP). Sin dispositivo válido,
+  // la IP carga con los topes de docente: rotar ids falsos no sirve de nada.
   const device = verifyDevice(req.headers.get("x-happy-device"));
   const ipKey = hashKey(`ip:${clientIp(req)}`);
-  const keys = device ? [hashKey(`d:${device}`), ipKey] : [ipKey, hashKey(`anon:${clientIp(req)}`)];
+  const checks: { limits: typeof rt.limits; key: string }[] = device
+    ? [
+        { limits: rt.limits, key: hashKey(`d:${device}`) },
+        { limits: rt.ipLimits, key: ipKey },
+      ]
+    : [{ limits: rt.limits, key: ipKey }];
   let blocked: LimitReason | undefined;
-  for (const k of keys) {
-    const allowed = rt.limits.check(k);
+  for (const c of checks) {
+    const allowed = c.limits.check(c.key);
     if (!allowed.ok) {
       blocked = allowed.reason;
       break;
@@ -115,7 +121,8 @@ export async function POST(req: Request): Promise<Response> {
   }
   if (blocked)
     return json(429, { error: "limit", reason: blocked, message: limitMessage(blocked) });
-  for (const k of keys) rt.limits.record(k);
+  for (const c of checks) c.limits.record(c.key);
+  const keys = checks.map((c) => c.key);
 
   const requestId = randomBytes(6).toString("hex");
   const encoder = new TextEncoder();

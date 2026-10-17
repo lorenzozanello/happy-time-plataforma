@@ -319,10 +319,13 @@ export async function* runHappy(
     }
     const final = cleanStrings(reader.final()) as { nextActions?: unknown } | null;
     if (final === null) {
-      if (stopReason === "max_tokens" && accepted.length) {
-        // Salida cortada por longitud: se entrega lo validado y queda marcado en las métricas.
-        truncated = true;
-        drop(["salida cortada por longitud (max_tokens)"]);
+      if (accepted.length) {
+        // Los bloques ya validados se entregan (sin acciones); solo queda marcado en las métricas.
+        // Reintentar descartaría lo mostrado y pagaría dos veces (revisión F5, N9).
+        if (stopReason === "max_tokens") {
+          truncated = true;
+          drop(["salida cortada por longitud (max_tokens)"]);
+        } else drop(["salida JSON incompleta: sin acciones"]);
       } else attemptErrors.push(`la salida no es JSON válido (stop: ${stopReason ?? "?"})`);
     }
     const actions: Action[] = [];
@@ -336,13 +339,9 @@ export async function* runHappy(
       }
     }
     const response: HappyResponse = { mode, blocks: accepted, nextActions: actions };
-    const check =
-      accepted.length && !attemptErrors.some((e) => e.startsWith("la salida no es JSON"))
-        ? validateResponse(response, vopts)
-        : {
-            ok: false as const,
-            errors: accepted.length ? attemptErrors : ["no quedó ningún bloque válido"],
-          };
+    const check = accepted.length
+      ? validateResponse(response, vopts)
+      : { ok: false as const, errors: ["no quedó ningún bloque válido"] };
     if (check.ok) {
       const units = unitsOf(repo, accepted);
       const metrics = metricsSoFar(attempt);
@@ -350,7 +349,10 @@ export async function* runHappy(
       yield { type: "done", response: check.response, units, metrics };
       return;
     }
-    feedback = [...new Set([...attemptErrors, ...check.errors])].slice(0, 8);
+    // Las correcciones vuelven al modelo en una línea cada una (sin saltos que abran secciones).
+    feedback = [...new Set([...attemptErrors, ...check.errors])]
+      .map((e) => e.replace(/\s*\n+\s*/g, " ").slice(0, 300))
+      .slice(0, 8);
     if (attempt === MAX_ATTEMPTS) {
       yield {
         type: "error",

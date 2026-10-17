@@ -1,7 +1,7 @@
 {
   "summary": {
     "suite": "happy-evals-v1",
-    "date": "2026-10-17T00:11:50.341Z",
+    "date": "2026-10-17T00:39:45.236Z",
     "provider": "fake",
     "model": "fake",
     "effort": null,
@@ -12,21 +12,21 @@
     "rubricMeanPct": null,
     "rubricBelow85": [],
     "firstBlockMs": {
-      "p50": 4,
-      "p75": 5,
-      "p95": 16
+      "p50": 5,
+      "p75": 6,
+      "p95": 29
     },
     "totalMs": {
       "p50": 10,
       "p75": 14,
-      "p95": 23
+      "p95": 37
     },
     "costUsd": {
       "mean": 0,
       "total": 0
     },
     "cacheReadShare": 0,
-    "durationMs": 150,
+    "durationMs": 169,
     "groups": [
       {
         "group": "explorar",
@@ -158,8 +158,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 27,
-        "totalMs": 33,
+        "firstBlockMs": 39,
+        "totalMs": 47,
         "retrieved": 44,
         "cited": [
           "S2.3#momento_vivir",
@@ -227,8 +227,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 19,
-        "totalMs": 25,
+        "firstBlockMs": 33,
+        "totalMs": 40,
         "retrieved": 45,
         "cited": [
           "S1.1#momento_vivir",
@@ -296,8 +296,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 18,
-        "totalMs": 24,
+        "firstBlockMs": 31,
+        "totalMs": 38,
         "retrieved": 40,
         "cited": [
           "S1.3#momento_vivir",
@@ -365,8 +365,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 17,
-        "totalMs": 24,
+        "firstBlockMs": 30,
+        "totalMs": 37,
         "retrieved": 41,
         "cited": [
           "S2.2#momento_vivir",
@@ -434,8 +434,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 16,
-        "totalMs": 23,
+        "firstBlockMs": 29,
+        "totalMs": 37,
         "retrieved": 40,
         "cited": [
           "S2.4#momento_vivir",
@@ -503,8 +503,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 12,
-        "totalMs": 19,
+        "firstBlockMs": 28,
+        "totalMs": 36,
         "retrieved": 41,
         "cited": [
           "S3.1#momento_vivir",
@@ -572,8 +572,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 11,
-        "totalMs": 19,
+        "firstBlockMs": 26,
+        "totalMs": 33,
         "retrieved": 42,
         "cited": [
           "S3.2#momento_vivir",
@@ -641,8 +641,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 9,
-        "totalMs": 17,
+        "firstBlockMs": 24,
+        "totalMs": 32,
         "retrieved": 42,
         "cited": [
           "S3.3#momento_vivir",
@@ -710,8 +710,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 8,
-        "totalMs": 11,
+        "firstBlockMs": 7,
+        "totalMs": 9,
         "retrieved": 40,
         "cited": [
           "S3.4#momento_vivir",
@@ -779,8 +779,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 7,
-        "totalMs": 11,
+        "firstBlockMs": 6,
+        "totalMs": 9,
         "retrieved": 40,
         "cited": [
           "K.1#momento_vivir",
@@ -848,8 +848,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 6,
-        "totalMs": 12,
+        "firstBlockMs": 5,
+        "totalMs": 8,
         "retrieved": 41,
         "cited": [
           "K.2#momento_vivir",
@@ -917,8 +917,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 11,
+        "firstBlockMs": 4,
+        "totalMs": 7,
         "retrieved": 40,
         "cited": [
           "K.3#momento_vivir",
@@ -987,7 +987,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 4,
-        "totalMs": 10,
+        "totalMs": 8,
         "retrieved": 40,
         "cited": [
           "K.4#momento_vivir",
@@ -1055,8 +1055,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 11,
+        "firstBlockMs": 3,
+        "totalMs": 7,
         "retrieved": 41,
         "cited": [
           "T.1#momento_vivir",
@@ -1124,8 +1124,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 3,
-        "totalMs": 10,
+        "firstBlockMs": 2,
+        "totalMs": 6,
         "retrieved": 40,
         "cited": [
           "T.2#momento_vivir",
@@ -1194,7 +1194,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 2,
-        "totalMs": 10,
+        "totalMs": 6,
         "retrieved": 41,
         "cited": [
           "T.3#momento_vivir",
@@ -1262,8 +1262,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 18,
+        "firstBlockMs": 7,
+        "totalMs": 21,
         "retrieved": 40,
         "cited": [
           "T.4#momento_vivir",
@@ -1331,8 +1331,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 18,
+        "firstBlockMs": 6,
+        "totalMs": 20,
         "retrieved": 45,
         "cited": [
           "K.3#momento_vivir",
@@ -1400,8 +1400,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 5,
+        "firstBlockMs": 6,
+        "totalMs": 7,
         "retrieved": 17,
         "cited": [],
         "stopReason": "end_turn"
@@ -1465,8 +1465,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 4,
+        "firstBlockMs": 5,
+        "totalMs": 6,
         "retrieved": 32,
         "cited": [],
         "stopReason": "end_turn"
@@ -1530,8 +1530,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 13,
+        "firstBlockMs": 6,
+        "totalMs": 16,
         "retrieved": 43,
         "cited": [
           "S2.1#propositos",
@@ -1599,8 +1599,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 3,
-        "totalMs": 14,
+        "firstBlockMs": 4,
+        "totalMs": 16,
         "retrieved": 41,
         "cited": [
           "S3.4#propositos",
@@ -1667,8 +1667,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 9,
+        "firstBlockMs": 3,
+        "totalMs": 12,
         "retrieved": 40,
         "cited": [
           "S2.3#momento_vivir",
@@ -1737,7 +1737,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 2,
-        "totalMs": 8,
+        "totalMs": 10,
         "retrieved": 41,
         "cited": [
           "S1.3#momento_proyectar",
@@ -1806,7 +1806,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 2,
-        "totalMs": 14,
+        "totalMs": 15,
         "retrieved": 41,
         "cited": [
           "S3.2#momento_vivir",
@@ -1874,8 +1874,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 14,
+        "firstBlockMs": 5,
+        "totalMs": 15,
         "retrieved": 40,
         "cited": [
           "K.2#propositos",
@@ -1943,8 +1943,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 6,
-        "totalMs": 16,
+        "firstBlockMs": 5,
+        "totalMs": 13,
         "retrieved": 43,
         "cited": [
           "T.1#propositos",
@@ -2013,7 +2013,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 2,
-        "totalMs": 10,
+        "totalMs": 9,
         "retrieved": 40,
         "cited": [
           "T.3#momento_vivir"
@@ -2080,7 +2080,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 1,
-        "totalMs": 12,
+        "totalMs": 10,
         "retrieved": 44,
         "cited": [
           "K.1#gire",
@@ -2147,8 +2147,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 7,
-        "totalMs": 14,
+        "firstBlockMs": 6,
+        "totalMs": 11,
         "retrieved": 33,
         "cited": [
           "S2.1#titulo",
@@ -2217,7 +2217,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 4,
-        "totalMs": 6,
+        "totalMs": 5,
         "retrieved": 40,
         "cited": [
           "T.3#momento_vivir"
@@ -2283,8 +2283,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 12,
+        "firstBlockMs": 3,
+        "totalMs": 9,
         "retrieved": 44,
         "cited": [
           "K.3#literatura",
@@ -2353,7 +2353,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 2,
-        "totalMs": 11,
+        "totalMs": 8,
         "retrieved": 45,
         "cited": [
           "S3.3#contexto_caribe",
@@ -2421,8 +2421,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 15,
+        "firstBlockMs": 1,
+        "totalMs": 9,
         "retrieved": 43,
         "cited": [
           "S2.4#propositos",
@@ -2491,7 +2491,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 1,
-        "totalMs": 7,
+        "totalMs": 6,
         "retrieved": 35,
         "cited": [
           "S2.1#titulo",
@@ -2560,8 +2560,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 14,
+        "firstBlockMs": 2,
+        "totalMs": 8,
         "retrieved": 19,
         "cited": [
           "S3.3#titulo",
@@ -2630,8 +2630,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 3,
-        "totalMs": 13,
+        "firstBlockMs": 1,
+        "totalMs": 11,
         "retrieved": 27,
         "cited": [
           "S3.1#titulo",
@@ -2700,8 +2700,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 12,
+        "firstBlockMs": 1,
+        "totalMs": 11,
         "retrieved": 25,
         "cited": [
           "K.1#titulo",
@@ -2770,8 +2770,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 7,
-        "totalMs": 12,
+        "firstBlockMs": 3,
+        "totalMs": 11,
         "retrieved": 26,
         "cited": [
           "S1.1#titulo",
@@ -2840,8 +2840,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 6,
-        "totalMs": 11,
+        "firstBlockMs": 3,
+        "totalMs": 12,
         "retrieved": 10,
         "cited": [
           "S3.3#alcance",
@@ -2909,7 +2909,7 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
+        "firstBlockMs": 2,
         "totalMs": 13,
         "retrieved": 24,
         "cited": [
@@ -2980,7 +2980,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 2,
-        "totalMs": 10,
+        "totalMs": 12,
         "retrieved": 43,
         "cited": [
           "S2.2#evidencias",
@@ -3048,8 +3048,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 9,
+        "firstBlockMs": 6,
+        "totalMs": 13,
         "retrieved": 19,
         "cited": [
           "K.2#evidencias",
@@ -3118,8 +3118,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 10,
+        "firstBlockMs": 6,
+        "totalMs": 12,
         "retrieved": 12,
         "cited": [
           "S3.4#contexto_caribe",
@@ -3188,7 +3188,7 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 1,
+        "firstBlockMs": 2,
         "totalMs": 10,
         "retrieved": 13,
         "cited": [
@@ -3259,7 +3259,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 2,
-        "totalMs": 11,
+        "totalMs": 12,
         "retrieved": 34,
         "cited": [
           "S1.1#titulo",
@@ -3328,8 +3328,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 16,
+        "firstBlockMs": 4,
+        "totalMs": 23,
         "retrieved": 45,
         "cited": [
           "S3.1#dua_apoyos_piar",
@@ -3397,8 +3397,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 18,
+        "firstBlockMs": 3,
+        "totalMs": 26,
         "retrieved": 45,
         "cited": [
           "K.3#propositos",
@@ -3467,8 +3467,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 10,
+        "firstBlockMs": 1,
+        "totalMs": 13,
         "retrieved": 23,
         "cited": [
           "S1.1#titulo",
@@ -3538,7 +3538,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 3,
-        "totalMs": 7,
+        "totalMs": 10,
         "retrieved": 45,
         "cited": [
           "S1.4#propositos"
@@ -3604,8 +3604,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 6,
+        "firstBlockMs": 5,
+        "totalMs": 9,
         "retrieved": 17,
         "cited": [
           "S3.4#titulo"
@@ -3671,8 +3671,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 6,
+        "firstBlockMs": 7,
+        "totalMs": 14,
         "retrieved": 41,
         "cited": [
           "K.1#titulo"
@@ -3738,8 +3738,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 3,
-        "totalMs": 6,
+        "firstBlockMs": 6,
+        "totalMs": 14,
         "retrieved": 31,
         "cited": [
           "S2.1#titulo"
@@ -3805,8 +3805,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 6,
+        "firstBlockMs": 4,
+        "totalMs": 14,
         "retrieved": 31,
         "cited": [
           "K.1#titulo"
@@ -3872,8 +3872,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 4,
+        "firstBlockMs": 8,
+        "totalMs": 10,
         "retrieved": 7,
         "cited": [],
         "stopReason": "end_turn"
@@ -3937,8 +3937,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 7,
+        "firstBlockMs": 10,
+        "totalMs": 12,
         "retrieved": 40,
         "cited": [],
         "stopReason": "end_turn"
@@ -4002,8 +4002,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 7,
+        "firstBlockMs": 5,
+        "totalMs": 9,
         "retrieved": 23,
         "cited": [
           "S3.1#titulo"
@@ -4069,8 +4069,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 7,
+        "firstBlockMs": 5,
+        "totalMs": 9,
         "retrieved": 17,
         "cited": [
           "S1.4#gire"
@@ -4136,8 +4136,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 21,
+        "firstBlockMs": 5,
+        "totalMs": 22,
         "retrieved": 40,
         "cited": [
           "S2.3#arte"
@@ -4203,8 +4203,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 3,
-        "totalMs": 8,
+        "firstBlockMs": 5,
+        "totalMs": 9,
         "retrieved": 44,
         "cited": [
           "K.3#propositos"
@@ -4270,8 +4270,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 16,
+        "firstBlockMs": 5,
+        "totalMs": 18,
         "retrieved": 46,
         "cited": [
           "T.1#documentacion_alertas",
@@ -4352,8 +4352,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 7,
+        "firstBlockMs": 7,
+        "totalMs": 8,
         "retrieved": 46,
         "cited": [
           "OBS-1"
@@ -4432,7 +4432,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 5,
-        "totalMs": 7,
+        "totalMs": 8,
         "retrieved": 43,
         "cited": [
           "OBS-1"
@@ -4823,7 +4823,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 5,
-        "totalMs": 17,
+        "totalMs": 20,
         "retrieved": 19,
         "cited": [
           "T.4#titulo",
@@ -4904,8 +4904,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 6,
-        "totalMs": 9,
+        "firstBlockMs": 5,
+        "totalMs": 8,
         "retrieved": 46,
         "cited": [
           "T.4#educacion_emocional"
@@ -5062,8 +5062,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 2,
-        "totalMs": 6,
+        "firstBlockMs": 3,
+        "totalMs": 7,
         "retrieved": 33,
         "cited": [
           "S2.1#titulo"
@@ -5142,7 +5142,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 4,
-        "totalMs": 11,
+        "totalMs": 13,
         "retrieved": 17,
         "cited": [
           "K.4#gire"
@@ -5221,7 +5221,7 @@
         },
         "costUsd": 0,
         "firstBlockMs": 5,
-        "totalMs": 10,
+        "totalMs": 12,
         "retrieved": 45,
         "cited": [
           "S1.1#momento_vivir"
@@ -5299,8 +5299,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 8,
-        "totalMs": 9,
+        "firstBlockMs": 9,
+        "totalMs": 11,
         "retrieved": 41,
         "cited": [
           "S3.1#momento_proyectar"
@@ -5875,8 +5875,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 6,
-        "totalMs": 7,
+        "firstBlockMs": 8,
+        "totalMs": 9,
         "retrieved": 40,
         "cited": [
           "T.1#titulo",
@@ -5944,8 +5944,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 5,
+        "firstBlockMs": 7,
+        "totalMs": 8,
         "retrieved": 23,
         "cited": [
           "T.1#titulo"
@@ -6011,8 +6011,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 5,
-        "totalMs": 5,
+        "firstBlockMs": 6,
+        "totalMs": 6,
         "retrieved": 17,
         "cited": [],
         "stopReason": "end_turn"
@@ -6076,8 +6076,8 @@
           "cacheWrite1hTokens": 0
         },
         "costUsd": 0,
-        "firstBlockMs": 4,
-        "totalMs": 6,
+        "firstBlockMs": 6,
+        "totalMs": 8,
         "retrieved": 42,
         "cited": [
           "S2.1#momento_vivir",

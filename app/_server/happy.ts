@@ -5,6 +5,7 @@
  */
 import "server-only";
 import { curriculumWindows } from "../../src/domain/curriculum/fingerprint";
+import { hasKnownPrice } from "../../src/domain/happy/cost";
 import { buildSearchIndex, type SearchIndex } from "../../src/domain/curriculum/search";
 import { DEFAULT_LIMITS, UsageLimits, type LimitsConfig } from "../../src/domain/happy/limits";
 import { createFakeModel, type ModelClient } from "../../src/domain/happy/model";
@@ -34,6 +35,25 @@ const int = (v: string | undefined, d: number) => {
 const oneOf = <T extends string>(v: string | undefined, allowed: readonly T[], d: T): T =>
   (allowed as readonly string[]).includes(v ?? "") ? (v as T) : d;
 
+/** Longitud mínima del código del piloto (la misma que exige la interfaz). */
+export const MIN_ACCESS_CODE_LENGTH = 4;
+
+/** Avisos de configuración (se registran una vez al arrancar). */
+export function configWarnings(c: HappyConfig, env: NodeJS.ProcessEnv = process.env): string[] {
+  const w: string[] = [];
+  if (env.HAPPY_ACCESS_CODE && !c.accessCode)
+    w.push(
+      `HAPPY_ACCESS_CODE es demasiado corto (mínimo ${String(MIN_ACCESS_CODE_LENGTH)} caracteres): se ignora.`,
+    );
+  if (c.provider === "anthropic" && !hasKnownPrice(c.modelId))
+    w.push(
+      `Sin precio conocido para ${c.modelId}: el costo se estima al precio más alto (Opus) hasta actualizar cost.ts.`,
+    );
+  if (env.HAPPY_THINKING === "between_tools" && c.thinking !== "between_tools")
+    w.push("HAPPY_THINKING=between_tools no está disponible en Haiku: se usa adaptive.");
+  return w;
+}
+
 export function readConfig(env: NodeJS.ProcessEnv = process.env): HappyConfig {
   const hasKey = Boolean(env.ANTHROPIC_API_KEY);
   const requested = oneOf(
@@ -42,13 +62,18 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): HappyConfig {
     hasKey ? "anthropic" : "off",
   );
   const provider: HappyProvider = requested === "anthropic" && !hasKey ? "off" : requested;
-  const accessCode = env.HAPPY_ACCESS_CODE?.trim() || undefined;
+  const rawCode = env.HAPPY_ACCESS_CODE?.trim() ?? "";
+  const accessCode = rawCode.length >= MIN_ACCESS_CODE_LENGTH ? rawCode : undefined;
+  const modelId = env.HAPPY_MODEL_ID?.trim() || "claude-sonnet-5-5";
+  const thinking = oneOf(env.HAPPY_THINKING, ["adaptive", "between_tools"] as const, "adaptive");
   return {
     // En producción, Happy real exige código de acceso (sin autenticación hasta F4).
     provider: provider !== "off" && !accessCode && env.NODE_ENV === "production" ? "off" : provider,
-    modelId: env.HAPPY_MODEL_ID?.trim() || "claude-sonnet-5-5",
+    modelId,
     effort: oneOf(env.HAPPY_EFFORT, ["low", "medium", "high"] as const, "low"),
-    thinking: oneOf(env.HAPPY_THINKING, ["adaptive", "between_tools"] as const, "adaptive"),
+    // `between_tools` solo existe en Sonnet 5.5 y superiores; en Haiku devolvería 400 en cada petición.
+    thinking:
+      thinking === "between_tools" && modelId.startsWith("claude-haiku") ? "adaptive" : thinking,
     maxTokens: int(env.HAPPY_MAX_TOKENS, 2048),
     accessCode,
     limits: {
@@ -91,6 +116,8 @@ export function getHappyRuntime(): Runtime {
     model,
     limits: new UsageLimits(config.limits),
   };
+  for (const w of configWarnings(config))
+    console.warn(JSON.stringify({ at: "happy-config", warning: w }));
   return runtime;
 }
 

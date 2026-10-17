@@ -22,27 +22,33 @@ import {
 } from "../../src/ui/app/types";
 
 export const ACCESS_KEY = "ht.app.happy.acceso";
-export const DEVICE_KEY = "ht.app.dispositivo";
+/** Id de dispositivo firmado por el servidor (lo emite GET /api/happy al presentar el código). */
+export const DEVICE_KEY = "ht.app.happy.dispositivo";
+
+/** Tiempo máximo hasta el primer byte y total de una respuesta (revisión F5, M6). */
+export const FIRST_BYTE_TIMEOUT_MS = 45_000;
+export const TOTAL_TIMEOUT_MS = 90_000;
 
 type Obj = Record<string, unknown>;
 const isObj = (v: unknown): v is Obj => typeof v === "object" && v !== null;
 
-function deviceId(storage: KeyValueStorage): string {
-  let id = storage.get(DEVICE_KEY);
-  if (!id) {
-    id = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-    storage.set(DEVICE_KEY, id);
-  }
-  return id;
+function authHeaders(storage: KeyValueStorage): Record<string, string> {
+  const code = storage.get(ACCESS_KEY);
+  const device = storage.get(DEVICE_KEY);
+  return {
+    ...(code ? { "x-happy-access": code } : {}),
+    ...(device ? { "x-happy-device": device } : {}),
+  };
 }
 
 export function createHappyAccess(storage: KeyValueStorage): HappyAccess {
   return {
     async status() {
-      const r = await fetch("/api/happy", { cache: "no-store" });
+      const r = await fetch("/api/happy", { cache: "no-store", headers: authHeaders(storage) });
       if (!r.ok) throw new HappyError("network", "Estado de Happy no disponible");
       const s = (await r.json()) as unknown;
       if (!isObj(s)) throw new HappyError("network", "Estado de Happy no disponible");
+      if (typeof s.device === "string" && s.device.length <= 80) storage.set(DEVICE_KEY, s.device);
       return {
         enabled: s.enabled === true,
         needsCode: s.needsCode === true,
@@ -51,6 +57,7 @@ export function createHappyAccess(storage: KeyValueStorage): HappyAccess {
     },
     setCode(code) {
       storage.set(ACCESS_KEY, code);
+      storage.remove(DEVICE_KEY); // el siguiente estado emite un dispositivo para este código
     },
   };
 }
@@ -74,22 +81,60 @@ async function readError(r: Response): Promise<never> {
 export function createHappyClient(storage: KeyValueStorage): HappyService {
   return {
     async respond(req, onProgress) {
-      const code = storage.get(ACCESS_KEY);
-      const r = await fetch("/api/happy", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          ...(code ? { "x-happy-access": code } : {}),
-          "x-happy-device": deviceId(storage),
-        },
-        body: JSON.stringify({
-          mode: req.mode,
-          message: req.message,
-          context: req.context,
-          history: req.history ?? [],
-        }),
+      // Cancelación: por la docente (req.signal) o por tiempo (primer byte / total).
+      const controller = new AbortController();
+      let why: "cancelled" | "timeout" | undefined;
+      const abort = (reason: "cancelled" | "timeout") => {
+        why ??= reason;
+        controller.abort();
+      };
+      req.signal?.addEventListener("abort", () => {
+        abort("cancelled");
       });
-      if (!r.ok || !r.body) await readError(r);
+      if (req.signal?.aborted) abort("cancelled");
+      const firstByte = setTimeout(() => {
+        abort("timeout");
+      }, FIRST_BYTE_TIMEOUT_MS);
+      const total = setTimeout(() => {
+        abort("timeout");
+      }, TOTAL_TIMEOUT_MS);
+      const fail = (e: unknown): never => {
+        if (why === "cancelled") throw new HappyError("cancelled", "Respuesta cancelada.");
+        if (why === "timeout")
+          throw new HappyError(
+            "timeout",
+            "Happy tardó demasiado en responder. Vuelve a intentarlo.",
+          );
+        if (e instanceof HappyError) throw e;
+        throw new HappyError(
+          "network",
+          "No hay conexión con Happy. Revisa tu red e inténtalo de nuevo.",
+        );
+      };
+
+      let r: Response;
+      try {
+        r = await fetch("/api/happy", {
+          method: "POST",
+          headers: { "content-type": "application/json", ...authHeaders(storage) },
+          body: JSON.stringify({
+            mode: req.mode,
+            message: req.message,
+            context: req.context,
+            history: req.history ?? [],
+          }),
+          signal: controller.signal,
+        });
+      } catch (e) {
+        clearTimeout(firstByte);
+        clearTimeout(total);
+        return fail(e);
+      }
+      clearTimeout(firstByte);
+      if (!r.ok || !r.body) {
+        clearTimeout(total);
+        await readError(r);
+      }
 
       const reader = (r.body as ReadableStream<Uint8Array>).getReader();
       const decoder = new TextDecoder();
@@ -154,17 +199,23 @@ export function createHappyClient(storage: KeyValueStorage): HappyService {
         }
       };
 
-      for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        let nl = buffer.indexOf("\n");
-        while (nl !== -1) {
-          const line = buffer.slice(0, nl).trim();
-          buffer = buffer.slice(nl + 1);
-          if (line) handle(line);
-          nl = buffer.indexOf("\n");
+      try {
+        for (;;) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          let nl = buffer.indexOf("\n");
+          while (nl !== -1) {
+            const line = buffer.slice(0, nl).trim();
+            buffer = buffer.slice(nl + 1);
+            if (line) handle(line);
+            nl = buffer.indexOf("\n");
+          }
         }
+      } catch (e) {
+        return fail(e);
+      } finally {
+        clearTimeout(total);
       }
       if (buffer.trim()) handle(buffer.trim());
       if (failure) throw failure;

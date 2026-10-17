@@ -14,6 +14,7 @@ import type { SearchIndex } from "../curriculum/search";
 import { estimateCostUsd, round6 } from "./cost";
 import { EMPTY_USAGE, type ModelClient, type ModelUsage } from "./model";
 import { checkPrivacy, PRIVACY_MESSAGE } from "./privacy";
+import { publicReason, stripFormat } from "./rules";
 import { buildModelRequest, PROMPT_VERSION, type ComposeOptions, type HistoryTurn } from "./prompt";
 import { retrieve } from "./retrieval";
 import {
@@ -51,6 +52,12 @@ export interface HappyMetrics {
   cited: string[];
   /** Política que resolvió la respuesta sin modelo. */
   policy?: "privacy";
+  /** Motivo de parada del modelo en el último intento (end_turn, max_tokens, refusal…). */
+  stopReason?: string | null;
+  /** La salida se cortó (max_tokens) y se entregó solo lo validado hasta ahí. */
+  truncated?: boolean;
+  effort?: string;
+  thinking?: string;
 }
 
 export type HappyEvent =
@@ -100,6 +107,20 @@ function unitsOf(repo: CurriculumRepository, blocks: Block[]): Unit[] {
   return out;
 }
 
+/** Quita caracteres de formato invisibles de todas las cadenas de un valor JSON (revisión F5, M4). */
+export function cleanStrings(v: unknown): unknown {
+  if (typeof v === "string") return stripFormat(v);
+  if (Array.isArray(v)) return v.map(cleanStrings);
+  if (typeof v === "object" && v !== null)
+    return Object.fromEntries(
+      Object.entries(v as Record<string, unknown>).map(([k, x]) => [k, cleanStrings(x)]),
+    );
+  return v;
+}
+
+const REFUSAL_NOTICE =
+  "Sobre eso no puedo ayudarte. Si quieres, cuéntame qué necesitas para tu grupo y lo vemos desde la malla.";
+
 function addUsage(a: ModelUsage, b: Partial<ModelUsage>): ModelUsage {
   return {
     inputTokens: a.inputTokens + (b.inputTokens ?? 0),
@@ -124,6 +145,8 @@ export async function* runHappy(
     model: deps.compose.model,
     promptVersion: PROMPT_VERSION,
     release,
+    ...(deps.compose.effort ? { effort: deps.compose.effort } : {}),
+    ...(deps.compose.thinking ? { thinking: deps.compose.thinking } : {}),
   };
 
   // 1. Política de entrada (ADR-009/014): solo sigue la versión redactada.
@@ -155,6 +178,12 @@ export async function* runHappy(
     return;
   }
   const message = privacy.redacted;
+  // La conversación previa que envía el cliente también pasa por la política (revisión F5, M1):
+  // nunca viaja al modelo un nombre o un dato de contacto, venga de donde venga.
+  const history = input.history.map((t) => ({
+    role: t.role,
+    text: checkPrivacy(stripFormat(t.text)).redacted.replace(/\s*\n+\s*/g, " "),
+  }));
 
   // 2. Recuperación determinista.
   const retrieval = retrieve(repo, deps.index, { mode, message, context: input.context });
@@ -176,9 +205,15 @@ export async function* runHappy(
   };
 
   let usage: ModelUsage = EMPTY_USAGE;
+  /** Motivos de descarte sin el texto rechazado: viajan al cliente y a los registros. */
   const dropped: string[] = [];
+  const drop = (errors: string[]) => {
+    for (const e of errors) dropped.push(publicReason(e));
+  };
   let firstBlockMs: number | null = null;
   let feedback: string[] | undefined;
+  let lastStop: string | null = null;
+  let truncated = false;
   const metricsSoFar = (attempts: number): HappyMetrics => ({
     ...base,
     attempts,
@@ -189,6 +224,8 @@ export async function* runHappy(
     totalMs: now() - t0,
     retrieved: retrieval.retrievedIds.size,
     cited: [],
+    stopReason: lastStop,
+    ...(truncated ? { truncated } : {}),
   });
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
@@ -202,7 +239,7 @@ export async function* runHappy(
         message,
         context: input.context,
         retrieval,
-        history: input.history,
+        history,
         ...(feedback ? { feedback } : {}),
       },
       { ...deps.compose, ...(input.signal ? { signal: input.signal } : {}) },
@@ -220,11 +257,11 @@ export async function* runHappy(
           usage = addUsage(usage, ev.usage);
           stopReason = ev.stopReason;
         } else {
-          for (const raw of reader.push(ev.delta)) {
-            const v = validateBlock(raw, vopts);
+          for (const rawBlock of reader.push(ev.delta)) {
+            const v = validateBlock(cleanStrings(rawBlock), vopts);
             if (!v.ok) {
               attemptErrors.push(...v.errors);
-              dropped.push(...v.errors);
+              drop(v.errors);
               continue;
             }
             const b = v.block;
@@ -232,13 +269,13 @@ export async function* runHappy(
             if (paths + nPaths > MAX_PATHS) {
               const msg = `más de ${MAX_PATHS} caminos en la respuesta`;
               attemptErrors.push(msg);
-              dropped.push(msg);
+              drop([msg]);
               continue;
             }
             if (accepted.length >= MAX_BLOCKS) {
               const msg = `más de ${MAX_BLOCKS} bloques`;
               attemptErrors.push(msg);
-              dropped.push(msg);
+              drop([msg]);
               continue;
             }
             paths += nPaths;
@@ -268,9 +305,26 @@ export async function* runHappy(
       return;
     }
 
-    const final = reader.final() as { nextActions?: unknown } | null;
-    if (final === null)
-      attemptErrors.push(`la salida no es JSON válido (stop: ${stopReason ?? "?"})`);
+    lastStop = stopReason;
+    // Rechazo del proveedor: no se reintenta (sería pagar dos veces por lo mismo); respuesta breve.
+    if (stopReason === "refusal") {
+      const response: HappyResponse = {
+        mode,
+        blocks: [{ kind: "notice", code: "out_of_scope", text: REFUSAL_NOTICE }],
+        nextActions: [],
+      };
+      drop(["el proveedor rechazó la solicitud (refusal)"]);
+      yield { type: "done", response, units: [], metrics: metricsSoFar(attempt) };
+      return;
+    }
+    const final = cleanStrings(reader.final()) as { nextActions?: unknown } | null;
+    if (final === null) {
+      if (stopReason === "max_tokens" && accepted.length) {
+        // Salida cortada por longitud: se entrega lo validado y queda marcado en las métricas.
+        truncated = true;
+        drop(["salida cortada por longitud (max_tokens)"]);
+      } else attemptErrors.push(`la salida no es JSON válido (stop: ${stopReason ?? "?"})`);
+    }
     const actions: Action[] = [];
     const rawActions = Array.isArray(final?.nextActions) ? (final.nextActions as unknown[]) : [];
     for (const raw of rawActions.slice(0, 4)) {
@@ -278,13 +332,17 @@ export async function* runHappy(
       if (v.ok) actions.push(v.action);
       else {
         attemptErrors.push(...v.errors);
-        dropped.push(...v.errors);
+        drop(v.errors);
       }
     }
     const response: HappyResponse = { mode, blocks: accepted, nextActions: actions };
-    const check = accepted.length
-      ? validateResponse(response, vopts)
-      : { ok: false as const, errors: ["no quedó ningún bloque válido"] };
+    const check =
+      accepted.length && !attemptErrors.some((e) => e.startsWith("la salida no es JSON"))
+        ? validateResponse(response, vopts)
+        : {
+            ok: false as const,
+            errors: accepted.length ? attemptErrors : ["no quedó ningún bloque válido"],
+          };
     if (check.ok) {
       const units = unitsOf(repo, accepted);
       const metrics = metricsSoFar(attempt);

@@ -21,6 +21,8 @@ export interface HappyRequest {
   context: HappyContext;
   /** Últimos turnos del hilo (texto redactado), para que Happy mantenga el contexto. */
   history?: HistoryTurn[];
+  /** Cancelación desde la interfaz (botón «Cancelar»). */
+  signal?: AbortSignal;
 }
 
 /** Respuesta parcial o final de Happy con los literales de las unidades citadas. */
@@ -33,7 +35,8 @@ export interface HappyResult extends HappyPartial {
 }
 
 /** Errores de Happy que la interfaz distingue (el resto son errores genéricos con reintento). */
-export type HappyErrorCode = "access" | "disabled" | "limit" | "network" | "invalid";
+export type HappyErrorCode =
+  "access" | "disabled" | "limit" | "network" | "invalid" | "cancelled" | "timeout";
 export class HappyError extends Error {
   constructor(
     readonly code: HappyErrorCode,

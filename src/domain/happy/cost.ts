@@ -27,9 +27,16 @@ export const PRICES: Record<string, ModelPrices> = {
 
 export const PRICES_AS_OF = "2026-10-16";
 
-/** Costo en USD; 0 para modelos sin precio conocido (p. ej. el modelo falso). */
+/** ¿El modelo tiene precio conocido? (El falso no; cualquier otro desconocido se cobra al precio más alto.) */
+export const hasKnownPrice = (modelId: string): boolean => modelId in PRICES;
+
+/**
+ * Costo en USD. Falla cerrado (revisión F5, M5): un modelo real sin precio en la tabla se estima al
+ * precio más alto conocido, para que el tope mensual siga actuando. Solo el modelo falso cuesta 0.
+ */
 export function estimateCostUsd(modelId: string, u: ModelUsage): number {
-  const p = PRICES[modelId];
+  if (modelId === "fake") return 0;
+  const p = PRICES[modelId] ?? PRICES["claude-opus-5-5"];
   if (!p) return 0;
   const perTok = (n: number, price: number) => (n * price) / 1_000_000;
   return (

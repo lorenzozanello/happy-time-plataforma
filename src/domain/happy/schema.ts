@@ -5,6 +5,7 @@
  */
 import { z } from "zod";
 import { findCopiedSequence } from "../curriculum/fingerprint";
+import { textRuleErrors } from "./rules";
 import { MODES, type Mode } from "./modes";
 
 export const ModeSchema = z.enum(MODES);
@@ -93,77 +94,12 @@ export function generatedStrings(r: HappyResponse): string[] {
     else if (b.kind === "steps") out.push(b.title, ...b.items);
     else out.push(b.text);
   }
-  out.push(...r.nextActions.map((a) => a.label));
+  for (const a of r.nextActions) {
+    out.push(a.label);
+    if (a.payload && a.kind === "send") out.push(a.payload);
+  }
   return out;
 }
-
-/**
- * Normaliza para comparar reglas: compatibilidad Unicode, sin caracteres invisibles, homoglifos
- * cirílicos/griegos comunes plegados, sin tildes, minúsculas y espacios simples.
- */
-export function normalizeForRules(s: string): string {
-  const confusables: Record<string, string> = {
-    а: "a",
-    е: "e",
-    о: "o",
-    р: "p",
-    с: "c",
-    у: "y",
-    х: "x",
-    і: "i",
-    ј: "j",
-    ѕ: "s",
-    А: "a",
-    Е: "e",
-    О: "o",
-    Р: "p",
-    С: "c",
-    Х: "x",
-    І: "i",
-    Т: "t",
-    М: "m",
-    Н: "h",
-    К: "k",
-    В: "b",
-    α: "a",
-    ο: "o",
-    ε: "e",
-    ι: "i",
-    ν: "v",
-    ρ: "p",
-    τ: "t",
-  };
-  return s
-    .normalize("NFKC")
-    .replace(/[\u200B-\u200F\u2060\uFEFF\u00AD]/g, "")
-    .replace(/[\u0370-\u03FF\u0400-\u04FF]/g, (c) => confusables[c] ?? c)
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase()
-    .replace(/\s+/g, " ");
-}
-
-const CLAIMS_AUTHORITY = [
-  /\b(segun|de acuerdo con|conforme a|como (dice|indica|establece))\s+(la|las|nuestra|el)\s+(malla|mallas|curriculo)\b/,
-  /\b(la|las|nuestra|nuestras)\s+mallas?\s+(oficial\s+|institucional\s+)?(dice|dicen|establece|establecen|indica|indican|exige|exigen|ordena|ordenan|plantea|plantean|propone|proponen|senala|senalan|determina|determinan|manda|pide)\b/,
-  /\bel curriculo\s+(oficial|institucional)?\s*(dice|establece|indica|exige)\b/,
-  /\bdesde (la|nuestra) malla\b/,
-  /\btexto (literal|oficial) de la malla\b/,
-  /\b(lineamiento|norma|requisito) (institucional|oficial)\b/,
-];
-
-const FORBIDDEN_OUTPUT = [
-  // diagnósticos o sospechas clínicas sobre una persona
-  /\bdiagnostic[oa]\s*[:=]/,
-  /\b(tiene|presenta|podria tener|puede tener|probablemente (sea|tenga)|parece tener|sospecha de|sospecho|rasgos|signos de)\s+(un |una |el |la )?(tea|tdah|autismo|autista|autistas|dislexia|discalculia|trastorno|sindrome|deficit|retraso)\b/,
-  /\b(es|parece|seria) (autista|hiperactiv[oa]|dislexic[oa])\b/,
-  // calificaciones numéricas o escalas de desempeño
-  /\b\d+([.,]\d+)?\s*(\/|sobre|de)\s*(5|10|100)\b/,
-  /\bnota\s*(es|de|final|:|=)\s*\d/,
-  /\bcalificacion\s*[:=]/,
-  /\b(desempeno|nivel de desempeno)\s+(bajo|basico|alto|superior)\b/,
-  /\b(reprueba|reprobo|pierde el (ano|grado))\b/,
-];
 
 /** Todo el texto generado de un solo bloque. */
 export function blockStrings(b: Block): string[] {
@@ -173,17 +109,15 @@ export function blockStrings(b: Block): string[] {
   return [b.text];
 }
 
+/** Compatibilidad: las reglas viven en rules.ts. */
+export { normalizeForRules } from "./rules";
+
 /** Reglas sobre un texto generado: autoridad, diagnóstico/calificación y copia literal. */
 export function generatedTextErrors(
   t: string,
   opts: Pick<ValidationOptions, "curriculumWindows">,
 ): string[] {
-  const errors: string[] = [];
-  const n = normalizeForRules(t);
-  if (CLAIMS_AUTHORITY.some((re) => re.test(n)))
-    errors.push(`texto generado reclama autoridad: "${t}"`);
-  if (FORBIDDEN_OUTPUT.some((re) => re.test(n)))
-    errors.push(`texto generado con diagnóstico o calificación: "${t}"`);
+  const errors = textRuleErrors(t);
   if (opts.curriculumWindows) {
     const copied = findCopiedSequence(t, opts.curriculumWindows);
     if (copied) errors.push(`texto generado copia la malla: "${copied}"`);
@@ -241,6 +175,7 @@ export function validateAction(
   )
     errors.push(`acción hacia una experiencia inexistente: ${a.payload ?? ""}`);
   errors.push(...generatedTextErrors(a.label, opts));
+  if (a.payload && a.kind === "send") errors.push(...generatedTextErrors(a.payload, opts));
   return errors.length ? { ok: false, errors } : { ok: true, action: a };
 }
 

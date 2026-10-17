@@ -80,10 +80,10 @@ export function parseOfferedUnits(text: string): { id: string; where: string }[]
   return out;
 }
 
-/** Texto de la docente, delimitado en el prompt entre <<< y >>>. */
+/** Texto de la docente, delimitado en el prompt entre <<<valla y >>>valla. */
 export function parseTeacherMessage(text: string): string {
-  const m = /<<<\n([\s\S]*?)\n>>>/.exec(text);
-  return m ? (m[1] as string) : "";
+  const m = /<<<(\S*)\n([\s\S]*?)\n>>>\1/.exec(text);
+  return m ? (m[2] as string) : "";
 }
 
 export function parseMode(text: string): string {
@@ -258,7 +258,7 @@ export function fakeCompose(req: ModelRequest): { blocks: FakeBlock[]; nextActio
     } else {
       blocks.push({
         kind: "question",
-        text: "¿Para qué nivel y periodo lo necesitas? Así te muestro lo que dice la malla.",
+        text: "¿Para qué nivel y periodo lo necesitas? Así busco las unidades de la malla que te sirven.",
       });
     }
   }
@@ -299,10 +299,11 @@ export function createFakeModel(opts: FakeModelOptions = {}): ModelClient {
         yield { type: "text", delta: text.slice(i, i + chunkSize) };
         if (i + chunkSize < text.length) await sleep(between);
       }
+      // Como el adaptador real: la entrada se reporta en `start`; en `end` solo la salida.
       yield {
         type: "end",
         stopReason: "end_turn",
-        usage: { inputTokens, outputTokens: Math.ceil(text.length / 4) },
+        usage: { outputTokens: Math.ceil(text.length / 4) },
       };
     },
   };

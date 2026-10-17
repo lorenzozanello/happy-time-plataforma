@@ -108,15 +108,18 @@ function idea(v: unknown): SavedIdea | null {
 /** Valida una respuesta de Happy guardada; sin validador (app sin Happy) se descartan los hilos. */
 export type ResponseCheck = (v: unknown) => boolean;
 
-function message(v: unknown, isResponse: ResponseCheck): ThreadMessage | null {
+function message(v: unknown, isResponse: ResponseCheck, release: string): ThreadMessage | null {
   if (!isObj(v) || !str(v.id, 100) || !num(v.createdAt)) return null;
   if (v.role !== "docente" && v.role !== "happy") return null;
   if (v.response !== undefined && !isResponse(v.response)) return null;
-  // Literales citados: cada uno se valida; uno inválido descarta el mensaje entero (no se pinta a medias).
+  // Literales citados: forma válida y de la release vigente; uno inválido descarta el mensaje entero
+  // (no se pinta a medias). La pantalla de Happy además comprueba la huella de cada texto.
   const units = arr(v.units);
   if (
     v.units !== undefined &&
-    (!Array.isArray(v.units) || units.length > 40 || !units.every(isUnitShape))
+    (!Array.isArray(v.units) ||
+      units.length > 40 ||
+      !units.every((u) => isUnitShape(u) && u.release === release))
   )
     return null;
   return {
@@ -155,7 +158,7 @@ function thread(v: unknown, isResponse: ResponseCheck, catalog: Catalog): Thread
         : {}),
     },
     messages: arr(v.messages).flatMap((m) => {
-      const ok = message(m, isResponse);
+      const ok = message(m, isResponse, catalog.release);
       return ok ? [ok] : [];
     }),
   };

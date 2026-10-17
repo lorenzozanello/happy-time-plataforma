@@ -4,19 +4,20 @@ import { HappyScreen } from "../../src/ui/screens/Happy";
 import { WithRoute } from "./params";
 
 /** F5: Happy real. Los parámetros (hilo, modo, experiencia) se leen dentro de <Suspense>. */
-export function HappyPage() {
+export function HappyPage({ unitHashes }: { unitHashes: Record<string, string> }) {
   return (
-    <Suspense fallback={<HappyScreen />}>
+    <Suspense fallback={<HappyScreen unitHashes={unitHashes} />}>
       <WithRoute>
         {(r) =>
           r.name === "happy" ? (
             <HappyScreen
+              unitHashes={unitHashes}
               {...(r.threadId ? { threadId: r.threadId } : {})}
               {...(r.mode ? { mode: r.mode } : {})}
               {...(r.context ? { context: r.context } : {})}
             />
           ) : (
-            <HappyScreen />
+            <HappyScreen unitHashes={unitHashes} />
           )
         }
       </WithRoute>

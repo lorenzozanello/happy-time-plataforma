@@ -1,4 +1,4 @@
-# Evaluación de Happy — 2026-10-16 · fake
+# Evaluación de Happy — 2026-10-17 · fake
 
 Suite `happy-evals-v1` · 85 escenarios · juez: ninguno (modelo falso: solo criterios estructurales)
 
@@ -6,8 +6,8 @@ Suite `happy-evals-v1` · 85 escenarios · juez: ninguno (modelo falso: solo cri
 |---|---|---|
 | Criterios duros | **100 %** ✅ | 100 % |
 | Conducta esperada | n/a (modelo falso) | 100 % |
-| Rúbrica (media) | n/a | ≥ 85 % |
-| Primer bloque p75 | 4 ms (falso) | ≤ 4 000 ms |
+| Rúbrica (media; mínimo por escenario 50 %) | n/a | ≥ 85 % |
+| Primer bloque p75 | 5 ms (falso) | ≤ 4 000 ms |
 | Costo medio por respuesta | US$0 (total US$0) | medido |
 | Lectura desde caché | 0 % de la entrada | — |
 

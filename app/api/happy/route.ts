@@ -1,20 +1,25 @@
 /**
  * /api/happy (F5-01, F5-10).
  *
- *   GET  → estado para la interfaz: { enabled, needsCode, provider, release }. Sin secretos.
- *   POST → { mode, message, context, history } con cabecera `x-happy-access` (código del piloto)
- *          y `x-happy-device` (id anónimo del dispositivo, para los límites).
- *          Respuesta `application/x-ndjson`: un evento JSON por línea (meta, block, reset, done, error).
+ *   GET  → estado para la interfaz: { enabled, needsCode, provider, release } y, si la cabecera
+ *          `x-happy-access` trae el código del piloto, un `device` firmado para este dispositivo.
+ *   POST → { mode, message, context, history } con cabeceras `x-happy-access` (código del piloto)
+ *          y `x-happy-device` (id firmado por el servidor; sin él o alterado, cuenta solo por IP con
+ *          un límite más estricto). Respuesta `application/x-ndjson`: un evento JSON por línea
+ *          (meta, block, reset, done, error).
  *
  * Códigos: 400 cuerpo inválido · 401 código ausente o incorrecto · 429 límite alcanzado ·
  * 503 Happy no habilitada. Nunca se registra el texto del mensaje: solo métricas.
+ * Límites (revisión F5, M2): se aplican a la vez por dispositivo firmado y por IP; en serverless
+ * son por instancia, por lo que el tope duro vive en la consola del proveedor (ADR-008).
  */
-import { createHash, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { LEVEL_IDS } from "../../../src/domain/curriculum/fields";
-import { limitMessage } from "../../../src/domain/happy/limits";
+import { limitMessage, type LimitReason } from "../../../src/domain/happy/limits";
 import { ModeSchema } from "../../../src/domain/happy/schema";
 import { getRepository } from "../../_server/curriculum";
+import { issueDevice, verifyDevice } from "../../_server/device";
 import { getHappyRuntime, runHappyOnServer } from "../../_server/happy";
 
 export const runtime = "nodejs";
@@ -42,30 +47,38 @@ const json = (status: number, body: unknown) =>
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 
+const sha = (s: string) => createHash("sha256").update(s).digest();
+
 function codeMatches(given: string | null, expected: string): boolean {
-  if (!given) return false;
-  const a = createHash("sha256").update(given).digest();
-  const b = createHash("sha256").update(expected).digest();
-  return timingSafeEqual(a, b);
+  return given ? timingSafeEqual(sha(given), sha(expected)) : false;
 }
 
-/** Clave anónima para los límites: id del dispositivo si lo envía; si no, la IP. Nunca se registra en claro. */
-function limitKey(req: Request): string {
-  const device = req.headers.get("x-happy-device")?.trim().slice(0, 64);
-  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "sin-ip";
-  return createHash("sha256")
-    .update(device ? `d:${device}` : `ip:${ip}`)
-    .digest("hex")
-    .slice(0, 16);
+/** IP del cliente: la que fija la plataforma (Vercel) antes que la cabecera reenviada. */
+function clientIp(req: Request): string {
+  return (
+    req.headers.get("x-real-ip")?.trim() ||
+    req.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim() ||
+    req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+    "sin-ip"
+  );
 }
 
-export function GET(): Response {
+const hashKey = (s: string) => sha(s).toString("hex").slice(0, 16);
+
+export function GET(req: Request): Response {
   const { config } = getHappyRuntime();
+  const authorized =
+    Boolean(config.accessCode) &&
+    codeMatches(req.headers.get("x-happy-access"), config.accessCode ?? "");
   return json(200, {
     enabled: config.provider !== "off",
     needsCode: Boolean(config.accessCode),
     provider: config.provider,
     release: getRepository().release.release,
+    // Un dispositivo nuevo recibe su id firmado solo si presenta el código.
+    ...(authorized && !verifyDevice(req.headers.get("x-happy-device"))
+      ? { device: issueDevice() }
+      : {}),
   });
 }
 
@@ -87,20 +100,24 @@ export async function POST(req: Request): Promise<Response> {
     return json(400, { error: "invalid", message: "La solicitud no tiene el formato esperado." });
   }
 
-  const key = limitKey(req);
-  const allowed = rt.limits.check(key);
-  if (!allowed.ok)
-    return json(429, {
-      error: "limit",
-      reason: allowed.reason,
-      message: limitMessage(allowed.reason),
-    });
-  rt.limits.record(key);
+  // Límites: por dispositivo firmado (si lo hay) y siempre por IP. Sin dispositivo válido, la IP
+  // carga con el límite completo del dispositivo además del suyo.
+  const device = verifyDevice(req.headers.get("x-happy-device"));
+  const ipKey = hashKey(`ip:${clientIp(req)}`);
+  const keys = device ? [hashKey(`d:${device}`), ipKey] : [ipKey, hashKey(`anon:${clientIp(req)}`)];
+  let blocked: LimitReason | undefined;
+  for (const k of keys) {
+    const allowed = rt.limits.check(k);
+    if (!allowed.ok) {
+      blocked = allowed.reason;
+      break;
+    }
+  }
+  if (blocked)
+    return json(429, { error: "limit", reason: blocked, message: limitMessage(blocked) });
+  for (const k of keys) rt.limits.record(k);
 
-  const requestId = createHash("sha256")
-    .update(`${key}:${String(Date.now())}:${Math.random()}`)
-    .digest("hex")
-    .slice(0, 12);
+  const requestId = randomBytes(6).toString("hex");
   const encoder = new TextEncoder();
   const c = body.context;
   const events = runHappyOnServer({
@@ -123,16 +140,17 @@ export async function POST(req: Request): Promise<Response> {
             const m = ev.metrics;
             if (m) {
               rt.limits.spend(m.costUsd);
-              // Registro estructurado sin texto de la docente (solo métricas).
+              // Registro estructurado sin texto de la docente ni texto generado: solo métricas y motivos.
               console.log(
                 JSON.stringify({
                   at: "happy",
                   requestId,
-                  key,
+                  key: keys[0],
                   mode: body.mode,
                   outcome: ev.type === "done" ? "ok" : ev.code,
                   ...m,
                   dropped: m.dropped.length,
+                  droppedReasons: m.dropped,
                 }),
               );
             }

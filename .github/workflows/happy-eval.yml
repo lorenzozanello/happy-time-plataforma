@@ -35,8 +35,6 @@ jobs:
     name: Suite de ${{ inputs.model_id }} (effort ${{ inputs.effort }})
     runs-on: ubuntu-latest
     timeout-minutes: 40
-    env:
-      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
     steps:
       - uses: actions/checkout@v5
 
@@ -49,15 +47,20 @@ jobs:
         run: npm ci
 
       - name: Comprobar el secreto
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "$ANTHROPIC_API_KEY" ]; then
             echo "::error::Falta el secreto ANTHROPIC_API_KEY en el repositorio."
             exit 1
           fi
 
+      # El secreto solo existe en este paso (no durante npm ci ni en los pasos de publicación).
       - name: Evaluar a Happy con el modelo real
         id: eval
         continue-on-error: true
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: >
           npm run happy:eval --
           --model anthropic

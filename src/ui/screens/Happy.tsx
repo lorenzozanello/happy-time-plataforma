@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { shortHeader } from "../../domain/curriculum/repository";
+import { textHash } from "../../domain/curriculum/fingerprint";
+import { shortHeader, type CurriculumRepository } from "../../domain/curriculum/repository";
 import type { Unit } from "../../domain/curriculum/schema";
 import { catalogExperience, catalogLevel } from "../../domain/curriculum/views";
 import type { HistoryTurn } from "../../domain/happy/prompt";
@@ -34,6 +35,12 @@ interface HappyProps {
   threadId?: string;
   mode?: Mode;
   context?: HappyContext;
+  /**
+   * Huellas `unitId → textHash` de la release (solo en la app; el prototipo tiene el repositorio).
+   * Todo literal que llegue del almacenamiento o de la red se comprueba contra ellas antes de
+   * pintarse como «Desde nuestra malla…» (revisión adversarial F5, A2).
+   */
+  unitHashes?: Record<string, string>;
 }
 
 export function HappyScreen(props: HappyProps) {
@@ -55,6 +62,7 @@ function HappyGate(props: HappyProps) {
     value: "loading",
   });
   const [attempt, setAttemptState] = useState(0);
+  const [justOpened, setJustOpened] = useState(false);
   const setAttempt = (fn: (n: number) => number) => {
     setAttemptState(fn);
   };
@@ -105,6 +113,7 @@ function HappyGate(props: HappyProps) {
     return (
       <AccessCodeForm
         onSaved={() => {
+          setJustOpened(true);
           setAttempt((n) => n + 1);
         }}
       />
@@ -112,6 +121,7 @@ function HappyGate(props: HappyProps) {
   return (
     <HappyChat
       {...props}
+      focusComposer={justOpened}
       onAccessDenied={() => {
         setStatus({ attempt, value: { ...view, hasCode: false } });
       }}
@@ -154,6 +164,7 @@ export function AccessCodeForm({ onSaved, message }: { onSaved: () => void; mess
           inputMode="text"
           autoComplete="off"
           autoCapitalize="off"
+          autoFocus
           value={code}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "happy-code-error" : undefined}
@@ -187,24 +198,58 @@ function historyOf(thread: Thread | undefined): HistoryTurn[] {
     .slice(-6);
 }
 
+/** Un literal solo se acepta si su huella coincide con la de la release (o si hay repositorio). */
+function makeVerifier(
+  unitHashes: Record<string, string> | undefined,
+  repo: CurriculumRepository | undefined,
+): (u: Unit) => boolean {
+  if (unitHashes) return (u) => unitHashes[u.unitId] === textHash(u.text);
+  if (repo) return (u) => repo.maybeUnit(u.unitId)?.text === u.text;
+  return () => false;
+}
+
+/** Descarta respuestas guardadas cuyos literales no pasen la verificación (nunca se pintan a medias). */
+function verifiedThread(t: Thread | undefined, verify: (u: Unit) => boolean): Thread | undefined {
+  if (!t) return undefined;
+  const messages = t.messages.filter((m) => !m.units || m.units.every(verify));
+  return messages.length === t.messages.length ? t : { ...t, messages };
+}
+
 function HappyChat({
   threadId,
   mode: initialMode,
   context: initialContext,
+  unitHashes,
+  focusComposer = false,
   onAccessDenied,
-}: HappyProps & { onAccessDenied?: () => void }) {
+}: HappyProps & { focusComposer?: boolean; onAccessDenied?: () => void }) {
   const app = useApp();
-  const { state, catalog, navigate, replace, dispatch, services, online } = app;
-  const existing = threadId ? state.threads.find((t) => t.id === threadId) : undefined;
+  const { state, catalog, navigate, replace, dispatch, services, online, repo } = app;
+  const verify = useMemo(() => makeVerifier(unitHashes, repo), [unitHashes, repo]);
+  const existing = verifiedThread(
+    threadId ? state.threads.find((t) => t.id === threadId) : undefined,
+    verify,
+  );
+  // Un código de experiencia en la URL solo vale si existe en el catálogo (revisión F5, B5).
+  const safeInitial: HappyContext | undefined =
+    initialContext?.experienceCode && !catalogExperience(catalog, initialContext.experienceCode)
+      ? Object.fromEntries(Object.entries(initialContext).filter(([k]) => k !== "experienceCode"))
+      : initialContext;
   const [thread, setThread] = useState<Thread | undefined>(existing);
   const [mode, setMode] = useState<Mode | undefined>(existing?.mode ?? initialMode);
-  const [context, setContext] = useState<HappyContext>(existing?.context ?? initialContext ?? {});
+  const [context, setContext] = useState<HappyContext>(existing?.context ?? safeInitial ?? {});
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [phase, setPhase] = useState<"idle" | "thinking" | "streaming" | "done">("idle");
   const [partial, setPartial] = useState<HappyPartial | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const end = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLTextAreaElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => {
+    if (focusComposer) input.current?.focus();
+  }, [focusComposer]);
 
   const avatarState: HappyState =
     phase === "thinking"
@@ -306,14 +351,17 @@ function HappyChat({
     persist(current);
     setPhase("thinking"); // feedback local inmediato (<150 ms)
     setPartial(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       const result = await services.happy.respond(
-        { mode: m, message: raw, context, history: historyOf(from) },
+        { mode: m, message: raw, context, history: historyOf(from), signal: controller.signal },
         (p) => {
           setPhase("streaming");
-          setPartial(p);
+          setPartial({ response: p.response, units: p.units.filter(verify) });
         },
       );
+      if (!result.units.every(verify)) throw new HappyError("invalid", "Respuesta no verificable.");
       current = {
         ...current,
         messages: [
@@ -351,7 +399,10 @@ function HappyChat({
             role: "happy",
             replyTo: userMsg.id,
             error:
-              err?.code === "limit" || err?.code === "disabled"
+              err?.code === "limit" ||
+              err?.code === "disabled" ||
+              err?.code === "cancelled" ||
+              err?.code === "timeout"
                 ? err.message
                 : "Happy no pudo responder esta vez. Tu mensaje quedó guardado; vuelve a intentarlo.",
             createdAt: now(),
@@ -361,8 +412,14 @@ function HappyChat({
       persist(current);
       setPartial(null);
       setPhase("idle");
+    } finally {
+      abortRef.current = null;
     }
   }
+
+  const cancel = () => {
+    abortRef.current?.abort();
+  };
 
   /** Reintenta el mensaje que falló (solo el último error), con el modo con que se envió. */
   const retry = (errorId: string) => {
@@ -491,7 +548,7 @@ function HappyChat({
       )}
 
       {started && thread && (
-        <div className="conversation" aria-live="polite">
+        <div className="conversation">
           {thread.messages.map((m) =>
             m.role === "docente" ? (
               <p key={m.id} className="bubble bubble--docente">
@@ -559,6 +616,7 @@ function HappyChat({
         </label>
         <textarea
           id="happy-input"
+          ref={input}
           rows={2}
           value={draft}
           disabled={!online}
@@ -583,14 +641,25 @@ function HappyChat({
             }
           }}
         />
-        <button
-          type="submit"
-          className="composer__send"
-          aria-label="Enviar"
-          disabled={!draft.trim() || busy || !online}
-        >
-          <Icon name="send" />
-        </button>
+        {busy ? (
+          <button
+            type="button"
+            className="composer__send composer__send--cancel"
+            aria-label="Cancelar"
+            onClick={cancel}
+          >
+            <Icon name="close" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="composer__send"
+            aria-label="Enviar"
+            disabled={!draft.trim() || !online}
+          >
+            <Icon name="send" />
+          </button>
+        )}
       </form>
       {toast && (
         <div className="toast" role="status">
@@ -698,6 +767,7 @@ export function ResponseView({
   onLand?: (title: string) => void;
 }) {
   const { repo } = useApp();
+  // `units` ya vienen verificadas por quien las pasa; el repositorio (prototipo) es la propia fuente.
   const byId = useMemo(() => new Map(units.map((u) => [u.unitId, u])), [units]);
   const resolve = (id: string): Unit | undefined => byId.get(id) ?? repo?.maybeUnit(id);
   return (

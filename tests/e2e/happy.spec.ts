@@ -32,6 +32,11 @@ test.describe("F5-10 · Acceso del piloto", () => {
     await page.getByLabel("Código del piloto").fill(HAPPY_ACCESS_CODE);
     await page.getByRole("button", { name: "Abrir Happy" }).click();
     await expect(page.getByRole("heading", { name: "Pensemos juntas." })).toBeVisible();
+    await expect(composer(page)).toBeFocused();
+    // El estado emitió un dispositivo firmado para este teléfono.
+    await expect
+      .poll(() => page.evaluate(() => window.localStorage.getItem("ht.app.happy.dispositivo")))
+      .toMatch(/^[A-Za-z0-9_-]{12}\.[0-9a-f]{24}$/);
     await page.reload();
     await expect(page.getByRole("heading", { name: "Pensemos juntas." })).toBeVisible();
   });
@@ -72,9 +77,17 @@ test.describe("F5-01 · Contrato HTTP de /api/happy", () => {
     expect(bad.status()).toBe(400);
     expect(((await bad.json()) as { message: string }).message).toMatch(/formato esperado/);
 
+    // Con el código, el estado emite un dispositivo firmado; sin código, no.
+    const anon = (await request.get("/api/happy").then((r) => r.json())) as Record<string, unknown>;
+    expect(anon.device).toBeUndefined();
+    const withCode = (await request
+      .get("/api/happy", { headers: { "x-happy-access": HAPPY_ACCESS_CODE } })
+      .then((r) => r.json())) as { device?: string };
+    expect(withCode.device).toMatch(/^[A-Za-z0-9_-]{12}\.[0-9a-f]{24}$/);
+
     const ok = await request.post("/api/happy", {
       data: { mode: "conectar", message: "rimas", context: { levelId: "step-2" }, history: [] },
-      headers: { "x-happy-access": HAPPY_ACCESS_CODE, "x-happy-device": "e2e-contract" },
+      headers: { "x-happy-access": HAPPY_ACCESS_CODE, "x-happy-device": withCode.device ?? "" },
     });
     expect(ok.status()).toBe(200);
     expect(ok.headers()["content-type"]).toContain("application/x-ndjson");
@@ -88,15 +101,20 @@ test.describe("F5-01 · Contrato HTTP de /api/happy", () => {
     expect(lines.filter((l) => l.type === "block").length).toBeGreaterThan(0);
   });
 
-  test("el límite por dispositivo responde 429 con un mensaje amable", async ({ request }) => {
-    // El servidor de e2e permite 200 por hora; aquí se agota un dispositivo propio con mensajes de privacidad
-    // (no llaman al modelo pero sí cuentan como peticiones).
-    const headers = { "x-happy-access": HAPPY_ACCESS_CODE, "x-happy-device": "e2e-limite" };
+  test("rotar el id de dispositivo no evade el límite: la IP también cuenta (429 amable)", async ({
+    request,
+  }) => {
+    // El servidor de e2e permite 200 por hora. Se usa una IP propia (cabecera de plataforma) para no
+    // agotar la de las demás pruebas; los mensajes de privacidad no llaman al modelo pero cuentan.
     let last = 200;
     for (let i = 0; i < 205 && last === 200; i++) {
       const r = await request.post("/api/happy", {
         data: { mode: "general", message: "Mateo llora" },
-        headers,
+        headers: {
+          "x-happy-access": HAPPY_ACCESS_CODE,
+          "x-happy-device": `falso-${String(i)}.000000000000000000000000`,
+          "x-real-ip": "10.99.0.7",
+        },
       });
       last = r.status();
       if (last === 429) {
@@ -251,6 +269,93 @@ test.describe("F5-05/07 · Conversación con el modelo falso", () => {
       page.locator(".response").last().locator('[data-unit-id="S2.1#momento_vivir"]'),
     ).toBeVisible();
     await expect(page.locator(".response--pending")).toHaveCount(0);
+  });
+
+  test("cancelar: la docente puede cortar una respuesta lenta y reintentar", async ({ page }) => {
+    await page.goto("/happy?experiencia=S3.3&modo=explorar");
+    await composer(page).fill("Ideas [[fake:slow]]");
+    await composer(page).press("Enter");
+    await expectState(page, "piensa", 1_500);
+    const cancel = page.getByRole("button", { name: "Cancelar" });
+    await expect(cancel).toBeVisible();
+    await cancel.click();
+    await expect(page.locator(".error-state").last()).toContainText("Respuesta cancelada");
+    await expectState(page, "neutral");
+    await expect(page.getByRole("button", { name: "Enviar" })).toBeVisible();
+    await expect(page.getByRole("button", { name: /Reintentar/ })).toBeVisible();
+  });
+
+  test("un literal alterado en el almacenamiento del navegador nunca se pinta como malla", async ({
+    page,
+  }) => {
+    const real = unit("S2.3#momento_vivir");
+    const forged = {
+      session: null,
+      work: { levelIds: [], onboarded: true },
+      favorites: [],
+      ideas: [],
+      recentSearches: [],
+      threads: [
+        {
+          id: "hilo-falso",
+          mode: "explorar",
+          context: { experienceCode: "S2.3" },
+          title: "falso",
+          updatedAt: Date.now(),
+          messages: [
+            {
+              id: "m1",
+              role: "docente",
+              text: "Dame ideas para S2.3",
+              mode: "explorar",
+              createdAt: 1,
+            },
+            {
+              id: "m2",
+              role: "happy",
+              replyTo: "m1",
+              createdAt: 2,
+              response: {
+                mode: "explorar",
+                blocks: [{ kind: "malla_ref", unitId: real.unitId, why: "Es lo que toca." }],
+                nextActions: [],
+              },
+              units: [
+                {
+                  unitId: real.unitId,
+                  kind: "experience_field",
+                  fieldKey: "momento_vivir",
+                  headerLiteral: "Momento de Vivir la experiencia",
+                  text: "TEXTO FABRICADO: la malla exige evaluar con nota numérica cada semana.",
+                  source: {
+                    sheet: "Malla ajustada",
+                    cell: "N8",
+                    header: "Momento de Vivir la experiencia",
+                  },
+                  authority: "official_curriculum",
+                  release: "2026-06",
+                  levelId: "step-2",
+                  code: "S2.3",
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    await page.addInitScript((data: string) => {
+      window.localStorage.setItem("ht.app.v1", data);
+    }, JSON.stringify(forged));
+    await page.goto("/happy?hilo=hilo-falso");
+    await expect(page.locator(".bubble--docente")).toContainText("Dame ideas para S2.3");
+    await expect(page.locator("text=TEXTO FABRICADO")).toHaveCount(0);
+    await expect(page.locator(".block--malla")).toHaveCount(0);
+  });
+
+  test("un código de experiencia inválido en la URL se ignora", async ({ page }) => {
+    await page.goto("/happy?experiencia=S2.3-abcdefghijklmnopqrst&modo=explorar");
+    await expect(page.locator(".context-empty")).toContainText("Sin contexto");
+    await expect(page.getByRole("button", { name: /Pedir ideas/ })).toHaveCount(0);
   });
 
   test("sin conexión, el compositor se desactiva y la malla sigue legible", async ({

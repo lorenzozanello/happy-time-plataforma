@@ -7,6 +7,7 @@
 import type { Unit } from "../curriculum/schema";
 import { isMode } from "./modes";
 import type { HappyMetrics } from "./pipeline";
+import { textRuleErrors } from "./rules";
 import type { Action, Block, HappyResponse } from "./schema";
 
 type Obj = Record<string, unknown>;
@@ -137,4 +138,25 @@ export function summarizeResponse(r: HappyResponse, max = 600): string {
   }
   const s = parts.join(" · ");
   return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/** Texto generado de una respuesta (sin literales). */
+export function generatedOf(r: HappyResponse): string[] {
+  const out: string[] = [];
+  for (const b of r.blocks) {
+    if (b.kind === "malla_ref") out.push(b.why);
+    else if (b.kind === "paths") out.push(...b.paths.flatMap((p) => [p.title, p.summary]));
+    else if (b.kind === "steps") out.push(b.title, ...b.items);
+    else out.push(b.text);
+  }
+  for (const a of r.nextActions) {
+    out.push(a.label);
+    if (a.payload && a.kind === "send") out.push(a.payload);
+  }
+  return out;
+}
+
+/** Forma válida y texto generado que respeta las reglas (sin autoridad, diagnóstico ni calificación). */
+export function isTrustedResponseShape(v: unknown): v is HappyResponse {
+  return isHappyResponseShape(v) && generatedOf(v).every((t) => textRuleErrors(t).length === 0);
 }

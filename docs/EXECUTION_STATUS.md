@@ -1,7 +1,7 @@
 # EXECUTION_STATUS — Happy Time
 
 **Última actualización:** 2026-10-16 (sesión 2)
-**Fase actual:** F5 — Happy núcleo (en curso, rama `f5-happy-nucleo`) · F3-09 y F2-09 siguen pendientes del owner
+**Fase actual:** F5 — Happy núcleo (lista en el PR #4; falta la corrida con el modelo real, que requiere el secreto) · F3-09 y F2-09 siguen pendientes del owner
 **Release curricular:** 2026-06 · SHA-256 `4d58fe13b8509a09688c315d5666c5821263016abb5b49538044de5f21803cbe` · Gate 0 de cada archivo recibido en `docs/GATE0_LOG.md`
 
 | Fase | Estado | Evidencia / bloqueo |
@@ -11,7 +11,7 @@
 | F2 Diseño y prototipo | ✅ Fusionado (PR #2) · ⏳ revisión humana (F2-09) | Reloj provisional hasta OD-6 |
 | F3 Malla en producción | ✅ F3-01…F3-08 fusionados (PR #3) · ⏳ F3-09 despliegue (owner conecta Vercel) | `npm run app:build`, `app:check-bundle`, `test:e2e:app` |
 | F4 Acceso y Guardados | ⏸ desbloqueada por OD-1 y OD-3; requiere que el owner cree Neon y Resend (gratis) | ADR-016 |
-| F5 Happy núcleo | 🔧 en curso (esta sesión) | criterios F5-01…F5-12 abajo |
+| F5 Happy núcleo | ✅ F5-01…F5-12 en el PR #4 · ⏳ corrida con modelo real (secreto `ANTHROPIC_API_KEY`) | `npm run happy:eval`, `test:e2e:app`, ADR-017 |
 | F6 Happy extendida | ⏸ | OD-4 |
 | F7 Endurecimiento y piloto | ⏸ | OD-8 |
 
@@ -177,6 +177,27 @@ del avatar ligados a eventos reales del stream.
 | F5-10 | Acceso provisional | Sin código → 401; código incorrecto → 401; con código → stream; sin `HAPPY_ACCESS_CODE` en producción → 503 «no habilitada». CSP y cabeceras intactas. e2e |
 | F5-11 | Accesibilidad y móvil | `/happy` y una conversación: axe sin violaciones serias en claro y oscuro a 360 px; objetivos ≥44 px; sin scroll horizontal; foco |
 | F5-12 | Calidad y cierre | `npm run verify`, `test:e2e`, `app:build`, `app:check-bundle`, `test:e2e:app` en verde; docs actualizados; revisión adversarial independiente corregida; **un solo push**, PR #4 |
+
+### Resultado F5 (2026-10-16)
+
+| ID | Resultado | Evidencia |
+|---|---|---|
+| F5-01 | ✅ | `POST /api/happy` → NDJSON `meta → block… → done` (o `reset`/`error`); 400/401/429/503 en español. `tests/unit/happy-pipeline.test.ts`, `tests/e2e/happy.spec.ts` («Contrato HTTP») |
+| F5-02 | ✅ | Política de privacidad en el servidor sobre el mensaje **y** la conversación previa, con texto normalizado; sin llamada al modelo y sin registro del original. Unitarias (M1, N4) y e2e («privacidad… sin llamar a /api/happy») |
+| F5-03 | ✅ | Observaciones + progresión y perfiles del nivel + 25 unidades de la experiencia + coincidencias filtradas por nivel (6/10/12 según el caso); `meta.retrieved`. 4 pruebas unitarias |
+| F5-04 | ✅ | `system.v1.ts` (versión `happy-system-v1`); bloque estable 1 h (> 512 tokens) y bloque de nivel 5 min; mensaje como datos con valla aleatoria. Prueba sobre la petición construida |
+| F5-05 | ✅ | `BlockStreamReader` probado cortando el JSON en todas las posiciones; e2e verifica *piensa → idea → resultado* con los tiempos del modelo falso (350 ms / 60 ms) en móvil y escritorio |
+| F5-06 | ✅ | Validación por bloque (cita no recuperada, segmento, autoridad, diagnóstico, calificación, copia normalizada, >3 caminos, >8 bloques, aviso de privacidad del modelo); reintento único; `refusal` y `max_tokens` manejados. 20 + 68 pruebas unitarias |
+| F5-07 | ✅ | El servidor envía solo las unidades citadas; e2e compara cada `[data-unit-id]` con el JSON compilado (incluido un fragmento); hilos guardados verificados por release y huella; `app:check-bundle` 0 secuencias; anti-hardcode cubre `evals/` |
+| F5-08 | ✅ | Métricas por respuesta (modelo, prompt, release, tokens con caché, costo, latencias, stopReason, descartes); límites por dispositivo firmado e IP; presupuesto mensual (falla cerrado con precio desconocido). Unitarias + e2e («rotar el id… 429») |
+| F5-09 | ✅ (modelo falso) · ⏳ (modelo real) | 85 escenarios en 8 grupos; `npm run happy:eval` con el falso: duros 100 % (estructural) en CI; `evals/happy/reports/latest-fake.md`. La corrida con Claude (`happy-eval`, workflow manual) requiere `ANTHROPIC_API_KEY` en los secretos del repositorio |
+| F5-10 | ✅ | Sin código → formulario; código corto → error; código incorrecto guardado → se vuelve a pedir y el mensaje queda; dispositivo firmado emitido con el código; sin `HAPPY_ACCESS_CODE` en producción → `off`. e2e |
+| F5-11 | ✅ | axe sin violaciones serias en claro y oscuro (código, apertura y conversación), 360 px y escritorio; objetivos ≥44 px; foco en el campo del código y en el compositor |
+| F5-12 | ✅ | `npm run verify` (370 pruebas), `happy:eval`, `app:build`, `app:check-bundle`, `test:e2e:app` (77), `test:e2e` (35) en verde; dos revisiones adversariales corregidas (ADR-017); un push, PR #4 |
+
+**Revisión adversarial independiente de F5 (2 pasadas, corregidas en el mismo PR):** **alta** — la suite evaluaba la respuesta ya filtrada por el validador (no medía al modelo); un hilo alterado o de otra release en `localStorage` podía pintar un literal falso como «Desde nuestra malla…»; **media** — history sin política de privacidad, límites evadibles rotando cabeceras, validador con huecos y luego con falsos positivos sobre vocabulario de inclusión, copia literal con invisibles y homoglifos, precio desconocido = costo 0, sin timeout ni cancelación, huella solo del texto (procedencia manipulable), límite por IP compartido por el NAT del jardín, pérdida silenciosa de respuestas guardadas; **baja** — motivos de descarte con texto, foco y `aria-live`, `?experiencia=` inválida, longitud del código, combinaciones de thinking/modelo, secreto expuesto a `npm ci`, juez manipulable y barra sin mínimo por escenario, correcciones con saltos de línea.
+
+Limitaciones conocidas: los contadores de límites y presupuesto son por instancia (en Vercel se reinician en cada arranque en frío): el tope duro de gasto es el de la consola de Anthropic. Las actions de GitHub van por versión, no por SHA. La conducta real del modelo (rúbrica, p75, costo) no se ha medido todavía: depende del secreto.
 
 ## Decisiones abiertas del owner
 OD-2 **cifra** del tope mensual · OD-4 datos de menores · OD-6 SVG del reloj · OD-8 piloto · OD-9 firma.
